@@ -19,7 +19,8 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -128,8 +129,13 @@ header .subtitle {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 /* Day Column */
@@ -286,7 +292,9 @@ header .subtitle {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Error */
@@ -410,8 +418,12 @@ header .subtitle {
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
-.positive { color: var(--green); }
-.negative { color: var(--red); }
+.positive {
+  color: var(--green);
+}
+.negative {
+  color: var(--red);
+}
 
 /* Guidance */
 .guidance-section,

@@ -10,21 +10,28 @@ import {
   formatPercent,
 } from '../src/lib/utils.js';
 
+function toLocalDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 describe('getWeekBounds', () => {
   it('returns monday and friday for a wednesday', () => {
     const { monday, friday } = getWeekBounds('2026-02-18');
-    expect(monday.toISOString().split('T')[0]).toBe('2026-02-16');
-    expect(friday.toISOString().split('T')[0]).toBe('2026-02-20');
+    expect(toLocalDateStr(monday)).toBe('2026-02-16');
+    expect(toLocalDateStr(friday)).toBe('2026-02-20');
   });
 
   it('returns same day for monday input', () => {
     const { monday } = getWeekBounds('2026-02-16');
-    expect(monday.toISOString().split('T')[0]).toBe('2026-02-16');
+    expect(toLocalDateStr(monday)).toBe('2026-02-16');
   });
 
   it('handles sunday correctly', () => {
     const { monday } = getWeekBounds('2026-02-15');
-    expect(monday.toISOString().split('T')[0]).toBe('2026-02-09');
+    expect(toLocalDateStr(monday)).toBe('2026-02-09');
   });
 });
 

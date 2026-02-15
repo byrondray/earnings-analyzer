@@ -22,9 +22,12 @@ export async function fetchPrevWeek(dateStr = null) {
 }
 
 export async function triggerAnalysis(ticker, quarter) {
-  const res = await fetch(`${API_BASE}/analysis/${ticker}?quarter=${encodeURIComponent(quarter)}`, {
-    method: 'POST',
-  });
+  const res = await fetch(
+    `${API_BASE}/analysis/${ticker}?quarter=${encodeURIComponent(quarter)}`,
+    {
+      method: 'POST',
+    },
+  );
   if (!res.ok) throw new Error(`Analysis failed: ${res.status}`);
   return res.json();
 }

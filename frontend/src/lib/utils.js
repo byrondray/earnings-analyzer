@@ -1,5 +1,5 @@
 export function getWeekBounds(date) {
-  const d = new Date(date);
+  const d = new Date(date + 'T00:00:00');
   const day = d.getDay();
   const diffToMonday = day === 0 ? -6 : 1 - day;
   const monday = new Date(d);
@@ -13,7 +13,11 @@ export function getWeekBounds(date) {
 
 export function formatDate(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 export function formatDateShort(dateStr) {

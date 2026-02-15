@@ -1,3 +1,5 @@
-{
-  "extends": "@sveltejs/vite-plugin-svelte/svelte-inspector.options"
-}
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+export default {
+  preprocess: vitePreprocess(),
+};
