@@ -53,17 +53,23 @@ class TestMapReportTime:
         assert _map_report_time("during") == ReportTime.UNKNOWN
 
 
+def _make_mock_httpx_client(response_data):
+    """httpx Response.json() is synchronous, so use MagicMock for the response."""
+    mock_response = MagicMock()
+    mock_response.json.return_value = response_data
+    mock_response.raise_for_status = MagicMock()
+
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    return mock_client
+
+
 class TestFetchEarningsFromFmp:
     @pytest.mark.asyncio
     async def test_fetch_returns_parsed_json(self, sample_fmp_response):
-        mock_response = AsyncMock()
-        mock_response.json.return_value = sample_fmp_response
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client = _make_mock_httpx_client(sample_fmp_response)
 
         with patch("app.services.earnings_calendar.httpx.AsyncClient", return_value=mock_client):
             result = await fetch_earnings_from_fmp(date(2026, 2, 16), date(2026, 2, 20))
@@ -74,14 +80,7 @@ class TestFetchEarningsFromFmp:
 
     @pytest.mark.asyncio
     async def test_fetch_passes_correct_params(self):
-        mock_response = AsyncMock()
-        mock_response.json.return_value = []
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client = _make_mock_httpx_client([])
 
         with patch("app.services.earnings_calendar.httpx.AsyncClient", return_value=mock_client):
             await fetch_earnings_from_fmp(date(2026, 2, 16), date(2026, 2, 20))

@@ -5,17 +5,22 @@ import pytest
 from app.mcp_server.tools.web_search import search_earnings_report
 
 
+def _make_mock_httpx_client(response_data):
+    mock_response = MagicMock()
+    mock_response.json.return_value = response_data
+    mock_response.raise_for_status = MagicMock()
+
+    mock_client = MagicMock()
+    mock_client.get = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    return mock_client
+
+
 class TestSearchEarningsReport:
     @pytest.mark.asyncio
     async def test_returns_formatted_results(self, sample_brave_response):
-        mock_response = AsyncMock()
-        mock_response.json.return_value = sample_brave_response
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client = _make_mock_httpx_client(sample_brave_response)
 
         with patch(
             "app.mcp_server.tools.web_search.httpx.AsyncClient",
@@ -30,14 +35,7 @@ class TestSearchEarningsReport:
 
     @pytest.mark.asyncio
     async def test_handles_no_results(self):
-        mock_response = AsyncMock()
-        mock_response.json.return_value = {"web": {"results": []}}
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client = _make_mock_httpx_client({"web": {"results": []}})
 
         with patch(
             "app.mcp_server.tools.web_search.httpx.AsyncClient",
@@ -49,14 +47,7 @@ class TestSearchEarningsReport:
 
     @pytest.mark.asyncio
     async def test_sends_correct_headers(self, sample_brave_response):
-        mock_response = AsyncMock()
-        mock_response.json.return_value = sample_brave_response
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client = _make_mock_httpx_client(sample_brave_response)
 
         with patch(
             "app.mcp_server.tools.web_search.httpx.AsyncClient",
@@ -82,14 +73,7 @@ class TestSearchEarningsReport:
                 ]
             }
         }
-        mock_response = AsyncMock()
-        mock_response.json.return_value = many_results
-        mock_response.raise_for_status = MagicMock()
-
-        mock_client = AsyncMock()
-        mock_client.get.return_value = mock_response
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client = _make_mock_httpx_client(many_results)
 
         with patch(
             "app.mcp_server.tools.web_search.httpx.AsyncClient",
