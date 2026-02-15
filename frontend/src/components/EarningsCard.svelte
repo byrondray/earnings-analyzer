@@ -41,25 +41,25 @@
   let hasMiss = $derived(analysisResult && analysisResult.eps_surprise_pct < 0);
 </script>
 
-<button class="earnings-card" onclick={handleClick} disabled={analyzing}>
-  <div class="card-top">
-    <span class="ticker">{event.ticker}</span>
+<button class="w-full bg-slate-900 border border-slate-700 rounded-md p-2.5 cursor-pointer transition-all text-left text-slate-100 font-[inherit] hover:not-disabled:bg-slate-700 hover:not-disabled:border-blue-500 disabled:opacity-70 disabled:cursor-wait" onclick={handleClick} disabled={analyzing}>
+  <div class="flex justify-between items-center mb-1">
+    <span class="font-bold text-sm text-blue-500">{event.ticker}</span>
     {#if analyzing}
-      <span class="spinner"></span>
+      <span class="inline-block w-3.5 h-3.5 border-2 border-slate-700 border-t-blue-500 rounded-full animate-[spin_0.6s_linear_infinite]"></span>
     {:else if hasBeat}
-      <span class="badge beat">Beat</span>
+      <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded bg-green-500/20 text-green-500 uppercase">Beat</span>
     {:else if hasMiss}
-      <span class="badge miss">Miss</span>
+      <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-500 uppercase">Miss</span>
     {/if}
   </div>
-  <div class="company-name">{event.company_name}</div>
+  <div class="text-xs text-slate-400 truncate mb-0.5">{event.company_name}</div>
   {#if event.eps_estimate}
-    <div class="estimate">EPS Est: ${event.eps_estimate.toFixed(2)}</div>
+    <div class="text-xs text-slate-400">EPS Est: ${event.eps_estimate.toFixed(2)}</div>
   {/if}
   {#if event.revenue_estimate}
-    <div class="estimate">Rev Est: {formatLargeNumber(event.revenue_estimate)}</div>
+    <div class="text-xs text-slate-400">Rev Est: {formatLargeNumber(event.revenue_estimate)}</div>
   {/if}
   {#if error}
-    <div class="card-error">⚠️ {error}</div>
+    <div class="text-[0.65rem] text-red-500 mt-1">⚠️ {error}</div>
   {/if}
 </button>

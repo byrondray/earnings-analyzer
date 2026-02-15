@@ -16,10 +16,10 @@
   }
 </script>
 
-<main>
-  <header>
-    <h1>📊 Earnings Analyzer</h1>
-    <p class="subtitle">Track and analyze upcoming earnings reports</p>
+<main class="max-w-350 mx-auto p-6 min-h-screen bg-slate-900 text-slate-100 font-sans">
+  <header class="text-center mb-8">
+    <h1 class="text-3xl font-bold mb-1">📊 Earnings Analyzer</h1>
+    <p class="text-slate-400 text-sm">Track and analyze upcoming earnings reports</p>
   </header>
 
   <WeekCalendar onShowAnalysis={handleShowAnalysis} />
