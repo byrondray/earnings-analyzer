@@ -1,0 +1,29 @@
+[project]
+name = "stock-earnings-analyzer"
+version = "0.1.0"
+description = "Analyze stock earnings reports with MCP-powered web search and Claude analysis"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "httpx>=0.28.0",
+    "mcp>=1.0.0",
+    "anthropic>=0.42.0",
+    "pydantic-settings>=2.7.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
