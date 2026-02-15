@@ -1,4 +1,6 @@
 from datetime import date, timedelta
+import csv
+import io
 
 import httpx
 from sqlalchemy import select
@@ -8,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import EarningsEvent, ReportTime
 
-FMP_BASE = "https://financialmodelingprep.com/api/v3"
+ALPHA_VANTAGE_BASE = "https://www.alphavantage.co/query"
 
 
 def week_bounds(d: date) -> tuple[date, date]:
@@ -21,27 +23,57 @@ def _map_report_time(raw: str | None) -> ReportTime:
     if not raw:
         return ReportTime.UNKNOWN
     lower = raw.lower()
-    if "bmo" in lower or "before" in lower:
+    if "bmo" in lower or "before" in lower or "pre" in lower:
         return ReportTime.PRE_MARKET
-    if "amc" in lower or "after" in lower:
+    if "amc" in lower or "after" in lower or "post" in lower:
         return ReportTime.POST_MARKET
     return ReportTime.UNKNOWN
 
 
-async def fetch_earnings_from_fmp(
+async def fetch_earnings_from_alpha_vantage(
     start: date, end: date
 ) -> list[dict]:
     settings = get_settings()
-    url = f"{FMP_BASE}/earning_calendar"
     params = {
-        "from": start.isoformat(),
-        "to": end.isoformat(),
-        "apikey": settings.FMP_API_KEY,
+        "function": "EARNINGS_CALENDAR",
+        "horizon": "3month",
+        "apikey": settings.ALPHA_VANTAGE_API_KEY,
     }
     async with httpx.AsyncClient(timeout=15.0) as client:
-        resp = await client.get(url, params=params)
-        resp.raise_for_status()
-        return resp.json()
+        resp = await client.get(ALPHA_VANTAGE_BASE, params=params)
+        if resp.status_code != 200:
+            return []
+
+        text = resp.text
+        if not text or text.startswith("{"):
+            return []
+
+        reader = csv.DictReader(io.StringIO(text))
+        results = []
+        for row in reader:
+            try:
+                report_date = date.fromisoformat(row.get("reportDate", ""))
+            except ValueError:
+                continue
+            if start <= report_date <= end:
+                results.append({
+                    "symbol": row.get("symbol", ""),
+                    "companyName": row.get("name", row.get("symbol", "")),
+                    "date": row.get("reportDate", ""),
+                    "time": row.get("timeOfTheDay", ""),
+                    "fiscalDateEnding": row.get("fiscalDateEnding"),
+                    "epsEstimated": _safe_float(row.get("estimate")),
+                })
+        return results
+
+
+def _safe_float(val: str | None) -> float | None:
+    if not val or val.strip() == "":
+        return None
+    try:
+        return float(val)
+    except ValueError:
+        return None
 
 
 async def upsert_earnings_events(
@@ -96,8 +128,11 @@ async def get_week_earnings(
 ) -> list[EarningsEvent]:
     monday, friday = week_bounds(target_date)
 
-    fmp_data = await fetch_earnings_from_fmp(monday, friday)
-    events = await upsert_earnings_events(db, fmp_data)
+    try:
+        fmp_data = await fetch_earnings_from_alpha_vantage(monday, friday)
+        events = await upsert_earnings_events(db, fmp_data)
+    except Exception:
+        events = []
 
     if not events:
         query = select(EarningsEvent).where(

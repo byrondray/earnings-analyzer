@@ -1,4 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import NullPool
 from app.config import get_settings
 
 
@@ -10,14 +11,35 @@ def _build_async_url(url: str) -> str:
     return url
 
 
-settings = get_settings()
-_async_url = _build_async_url(settings.DATABASE_URL)
+_engine = None
+_session_factory = None
 
-engine = create_async_engine(_async_url, echo=False, pool_size=5, max_overflow=10)
 
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+def get_engine():
+    global _engine
+    if _engine is None:
+        settings = get_settings()
+        _async_url = _build_async_url(settings.DATABASE_URL)
+        _engine = create_async_engine(
+            _async_url,
+            echo=False,
+            poolclass=NullPool,
+            connect_args={"ssl": False},
+        )
+    return _engine
+
+
+def get_session_factory():
+    global _session_factory
+    if _session_factory is None:
+        _session_factory = async_sessionmaker(get_engine(), class_=AsyncSession, expire_on_commit=False)
+    return _session_factory
+
+
+engine = property(lambda self: get_engine())
 
 
 async def get_db() -> AsyncSession:
-    async with async_session() as session:
+    factory = get_session_factory()
+    async with factory() as session:
         yield session

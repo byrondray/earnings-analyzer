@@ -3,13 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.db.database import engine
+from app.db.database import get_engine
 from app.db.models import Base
 from app.routers import calendar, analysis
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
