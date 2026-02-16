@@ -341,8 +341,8 @@ async def get_week_earnings(
 
     try:
         events = await _enrich_market_caps_from_nasdaq(db, events)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Market cap enrichment failed: %s", e)
 
     return sorted(
         events,
