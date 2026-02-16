@@ -11,6 +11,12 @@ from app.mcp_server.tools.analyze import analyze_earnings
 async def run_analysis(
     db: AsyncSession, ticker: str, quarter: str
 ) -> dict:
+    from app.services.cache import get_cached_analysis_redis, set_cached_analysis_redis
+
+    cached = await get_cached_analysis_redis(ticker, quarter)
+    if cached:
+        return cached
+
     search_results = await search_earnings_report(ticker, quarter)
     analysis = await analyze_earnings(ticker, search_results)
 
@@ -46,6 +52,9 @@ async def run_analysis(
     analysis["ticker"] = ticker.upper()
     analysis["quarter"] = quarter
     analysis.setdefault("has_reported", True)
+
+    await set_cached_analysis_redis(ticker, quarter, analysis)
+
     return analysis
 
 

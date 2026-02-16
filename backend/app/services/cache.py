@@ -10,6 +10,7 @@ _redis_client: redis.Redis | None = None
 EARNINGS_CALENDAR_TTL = 4 * 60 * 60  # 4 hours
 AV_SYNC_TTL = 4 * 60 * 60  # 4 hours - throttle Alpha Vantage bulk syncs
 MARKET_CAP_TTL = 24 * 60 * 60  # 24 hours
+ANALYSIS_TTL = 7 * 24 * 60 * 60  # 7 days
 
 
 async def get_redis() -> redis.Redis | None:
@@ -120,6 +121,37 @@ async def set_many_cached_market_caps(caps: dict[str, float]):
         for ticker, cap in caps.items():
             pipe.setex(_market_cap_key(ticker), MARKET_CAP_TTL, str(cap))
         await pipe.execute()
+    except Exception:
+        pass
+
+
+def _analysis_key(ticker: str, quarter: str) -> str:
+    return f"earnings:analysis:{ticker.upper()}:{quarter}"
+
+
+async def get_cached_analysis_redis(ticker: str, quarter: str) -> dict | None:
+    r = await get_redis()
+    if r is None:
+        return None
+    try:
+        data = await r.get(_analysis_key(ticker, quarter))
+        if data:
+            return json.loads(data)
+    except Exception:
+        pass
+    return None
+
+
+async def set_cached_analysis_redis(ticker: str, quarter: str, analysis: dict):
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        await r.setex(
+            _analysis_key(ticker, quarter),
+            ANALYSIS_TTL,
+            json.dumps(analysis, default=str),
+        )
     except Exception:
         pass
 
