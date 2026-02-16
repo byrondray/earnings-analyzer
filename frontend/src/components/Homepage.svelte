@@ -2,6 +2,7 @@
   import { fetchHighlights, triggerAnalysis, getAnalysis, searchStock } from '../lib/api.js';
   import { formatLargeNumber, formatDate } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
+  import Sparkline from './Sparkline.svelte';
 
   let { onShowAnalysis, onNavigateToCalendar, onError, user = null, favorites = new Set(), onFavoriteChange } = $props();
 
@@ -165,6 +166,7 @@
                 {#if analyzingTicker === ticker && analyzeStatus}
                   <div class="text-[0.65rem] text-accent-green/80 mt-0.5 animate-pulse">{analyzeStatus}</div>
                 {/if}
+                <Sparkline {ticker} />
               </button>
             {/each}
           </div>
@@ -221,6 +223,7 @@
                 {#if analyzingTicker === event.ticker && analyzeStatus}
                   <div class="text-[0.65rem] text-accent-green/80 mt-0.5 animate-pulse">{analyzeStatus}</div>
                 {/if}
+                <Sparkline ticker={event.ticker} />
               </button>
             {/each}
           </div>
@@ -279,6 +282,7 @@
                 {#if analyzingTicker === event.ticker && analyzeStatus}
                   <div class="text-[0.65rem] text-accent-green/80 mt-0.5 animate-pulse">{analyzeStatus}</div>
                 {/if}
+                <Sparkline ticker={event.ticker} />
               </button>
             {/each}
           </div>

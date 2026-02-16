@@ -13,6 +13,7 @@ MARKET_CAP_TTL = 24 * 60 * 60  # 24 hours
 ANALYSIS_TTL = 7 * 24 * 60 * 60  # 7 days
 ANALYSIS_UNREPORTED_TTL = 4 * 60 * 60  # 4 hours for pre-report analyses
 HIGHLIGHTS_TTL = 4 * 60 * 60  # 4 hours
+SPARKLINE_TTL = 12 * 60 * 60  # 12 hours
 
 
 async def get_redis() -> redis.Redis | None:
@@ -184,6 +185,37 @@ async def set_cached_highlights(highlights: dict):
             _HIGHLIGHTS_KEY,
             HIGHLIGHTS_TTL,
             json.dumps(highlights, default=str),
+        )
+    except Exception:
+        pass
+
+
+def _sparkline_key(ticker: str) -> str:
+    return f"earnings:sparkline:{ticker.upper()}"
+
+
+async def get_cached_sparkline(ticker: str) -> list[float] | None:
+    r = await get_redis()
+    if r is None:
+        return None
+    try:
+        data = await r.get(_sparkline_key(ticker))
+        if data:
+            return json.loads(data)
+    except Exception:
+        pass
+    return None
+
+
+async def set_cached_sparkline(ticker: str, prices: list[float]):
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        await r.setex(
+            _sparkline_key(ticker),
+            SPARKLINE_TTL,
+            json.dumps(prices),
         )
     except Exception:
         pass

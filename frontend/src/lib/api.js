@@ -94,6 +94,22 @@ export async function searchStock(ticker) {
   return res.json();
 }
 
+export async function fetchSparkline(ticker) {
+  const res = await fetch(
+    `${API_BASE}/calendar/sparkline/${encodeURIComponent(ticker)}`,
+  );
+  if (!res.ok) return { ticker, prices: [] };
+  return res.json();
+}
+
+export async function fetchSparklines(tickers) {
+  if (!tickers.length) return {};
+  const params = tickers.map((t) => `t=${encodeURIComponent(t)}`).join('&');
+  const res = await fetch(`${API_BASE}/calendar/sparklines?${params}`);
+  if (!res.ok) return {};
+  return res.json();
+}
+
 export async function fetchHighlights() {
   const res = await fetch(`${API_BASE}/calendar/highlights`);
   if (!res.ok) throw new Error(`Failed to fetch highlights: ${res.status}`);

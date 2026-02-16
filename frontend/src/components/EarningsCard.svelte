@@ -2,6 +2,7 @@
   import { triggerAnalysis, getAnalysis } from '../lib/api.js';
   import { formatLargeNumber } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
+  import Sparkline from './Sparkline.svelte';
 
   let { event, onShowAnalysis, onError, user = null, isFavorited = false, onFavoriteChange } = $props();
 
@@ -96,4 +97,5 @@
   {#if analyzing && statusMessage}
     <div class="text-[0.65rem] text-accent-green/80 mt-1 animate-pulse">{statusMessage}</div>
   {/if}
+  <Sparkline ticker={event.ticker} />
 </button>
