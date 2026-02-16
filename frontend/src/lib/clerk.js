@@ -1,5 +1,3 @@
-import Clerk from '@clerk/clerk-js';
-
 const PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 let clerkInstance = null;
@@ -17,10 +15,18 @@ export async function initClerk() {
     return null;
   }
 
-  clerkInstance = new Clerk(PUBLISHABLE_KEY);
-  await clerkInstance.load();
-  _resolveReady();
-  return clerkInstance;
+  try {
+    const ClerkModule = await import('@clerk/clerk-js');
+    const Clerk = ClerkModule.Clerk || ClerkModule.default;
+    clerkInstance = new Clerk(PUBLISHABLE_KEY);
+    await clerkInstance.load();
+    _resolveReady();
+    return clerkInstance;
+  } catch (err) {
+    console.error('Failed to load Clerk:', err);
+    _resolveReady();
+    return null;
+  }
 }
 
 export function getClerk() {

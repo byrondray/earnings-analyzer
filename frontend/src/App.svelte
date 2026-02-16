@@ -35,6 +35,9 @@
         if (user) loadFavorites();
         else favorites = new Set();
       });
+    }).catch((err) => {
+      console.error('Clerk init failed:', err);
+      authReady = true;
     });
   });
 
