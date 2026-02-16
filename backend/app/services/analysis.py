@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from datetime import datetime
 
 from sqlalchemy import select
@@ -8,20 +9,29 @@ from app.mcp_server.tools.web_search import search_earnings_report
 from app.mcp_server.tools.analyze import analyze_earnings
 
 
-async def run_analysis(
+async def run_analysis_streaming(
     db: AsyncSession, ticker: str, quarter: str
-) -> dict:
+) -> AsyncGenerator[tuple[str, dict], None]:
     from app.services.cache import get_cached_analysis_redis, set_cached_analysis_redis
+
+    yield ("status", {"step": "cache", "message": "Checking cache..."})
 
     cached = await get_cached_analysis_redis(ticker, quarter)
     if cached:
-        return cached
+        yield ("result", cached)
+        return
 
+    yield ("status", {"step": "search", "message": "Searching for earnings data..."})
     search_results = await search_earnings_report(ticker, quarter)
+
+    yield ("status", {"step": "analyze", "message": "Analyzing with AI..."})
     analysis = await analyze_earnings(ticker, search_results)
 
     if "error" in analysis:
-        return analysis
+        yield ("error", analysis)
+        return
+
+    yield ("status", {"step": "save", "message": "Saving results..."})
 
     event_query = select(EarningsEvent).where(EarningsEvent.ticker == ticker.upper())
     event_result = await db.execute(event_query)
@@ -55,7 +65,7 @@ async def run_analysis(
 
     await set_cached_analysis_redis(ticker, quarter, analysis)
 
-    return analysis
+    yield ("result", analysis)
 
 
 async def get_cached_analysis(

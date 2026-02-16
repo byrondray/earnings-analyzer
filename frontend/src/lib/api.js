@@ -21,15 +21,49 @@ export async function fetchPrevWeek(dateStr = null) {
   return res.json();
 }
 
-export async function triggerAnalysis(ticker, quarter) {
+export async function triggerAnalysis(ticker, quarter, onStatus) {
   const res = await fetch(
     `${API_BASE}/analysis/${ticker}?quarter=${encodeURIComponent(quarter)}`,
     {
       method: 'POST',
+      headers: { Accept: 'text/event-stream' },
     },
   );
   if (!res.ok) throw new Error(`Analysis failed: ${res.status}`);
-  return res.json();
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let result = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    let eventType = null;
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        eventType = line.slice(7).trim();
+      } else if (line.startsWith('data: ') && eventType) {
+        const data = JSON.parse(line.slice(6));
+        if (eventType === 'status' && onStatus) {
+          onStatus(data.message);
+        } else if (eventType === 'result') {
+          result = data;
+        } else if (eventType === 'error') {
+          throw new Error(data.error || 'Analysis failed');
+        }
+        eventType = null;
+      }
+    }
+  }
+
+  if (!result) throw new Error('No analysis result received');
+  return result;
 }
 
 export async function getAnalysis(ticker) {

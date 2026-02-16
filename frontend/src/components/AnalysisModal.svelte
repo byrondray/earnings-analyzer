@@ -117,7 +117,7 @@
           {formatPercent(data.price_reaction_pct)}
         </span>
       {:else}
-        <span class="text-sm text-text-muted">Pending earnings report</span>
+        <span class="text-sm text-text-muted">{data.has_reported === false ? 'Pending earnings report' : 'Not available'}</span>
       {/if}
     </div>
 

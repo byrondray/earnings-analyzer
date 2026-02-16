@@ -8,6 +8,7 @@ from app.services.earnings_calendar import (
     _map_report_time,
     fetch_all_earnings_from_alpha_vantage,
     _parse_nasdaq_eps_forecast,
+    _normalize_fiscal_quarter,
     _fetch_historical_earnings_nasdaq,
 )
 from app.db.models import ReportTime
@@ -108,6 +109,23 @@ class TestFetchAllEarningsFromAlphaVantage:
             result = await fetch_all_earnings_from_alpha_vantage()
 
         assert result[0]["epsEstimated"] == 2.35
+
+
+class TestNormalizeFiscalQuarter:
+    def test_nasdaq_format(self):
+        assert _normalize_fiscal_quarter("Dec/2025") == "2025-12-31"
+
+    def test_nasdaq_format_march(self):
+        assert _normalize_fiscal_quarter("Mar/2025") == "2025-03-31"
+
+    def test_nasdaq_format_feb(self):
+        assert _normalize_fiscal_quarter("Feb/2024") == "2024-02-29"
+
+    def test_iso_passthrough(self):
+        assert _normalize_fiscal_quarter("2025-12-31") == "2025-12-31"
+
+    def test_none(self):
+        assert _normalize_fiscal_quarter(None) is None
 
 
 class TestParseNasdaqEpsForecast:

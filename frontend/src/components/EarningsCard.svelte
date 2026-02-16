@@ -7,11 +7,19 @@
   let analyzing = $state(false);
   let analysisResult = $state(null);
   let error = $state(null);
+  let statusMessage = $state('');
 
   let hasReported = $derived(() => {
     const today = new Date().toISOString().split('T')[0];
     return event.report_date < today;
   });
+
+  function computeQuarter(fiscalQuarter) {
+    if (!fiscalQuarter) return 'Q4-2025';
+    const d = new Date(fiscalQuarter + 'T00:00:00');
+    if (isNaN(d.getTime())) return fiscalQuarter;
+    return `Q${Math.ceil((d.getMonth() + 1) / 3)}-${d.getFullYear()}`;
+  }
 
   async function handleClick() {
     if (analyzing) return;
@@ -23,6 +31,7 @@
 
     analyzing = true;
     error = null;
+    statusMessage = 'Starting analysis...';
 
     try {
       let cached = await getAnalysis(event.ticker);
@@ -30,20 +39,22 @@
         analysisResult = cached;
         onShowAnalysis({ detail: { ...cached, company_name: event.company_name } });
         analyzing = false;
+        statusMessage = '';
         return;
       }
 
-      const quarter = event.fiscal_quarter
-        ? `Q${Math.ceil(new Date(event.fiscal_quarter + 'T00:00:00').getMonth() / 3)}-${new Date(event.fiscal_quarter + 'T00:00:00').getFullYear()}`
-        : 'Q4-2025';
+      const quarter = computeQuarter(event.fiscal_quarter);
 
-      const result = await triggerAnalysis(event.ticker, quarter);
+      const result = await triggerAnalysis(event.ticker, quarter, (msg) => {
+        statusMessage = msg;
+      });
       analysisResult = result;
       onShowAnalysis({ detail: { ...result, company_name: event.company_name } });
     } catch (e) {
       error = e.message;
     } finally {
       analyzing = false;
+      statusMessage = '';
     }
   }
 
@@ -76,5 +87,8 @@
   {/if}
   {#if error}
     <div class="text-[0.65rem] text-red-400 mt-1">⚠️ {error}</div>
+  {/if}
+  {#if analyzing && statusMessage}
+    <div class="text-[0.65rem] text-accent-green/80 mt-1 animate-pulse">{statusMessage}</div>
   {/if}
 </button>

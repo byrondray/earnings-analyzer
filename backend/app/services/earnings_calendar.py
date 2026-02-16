@@ -70,6 +70,29 @@ NASDAQ_EARNINGS_URL = "https://api.nasdaq.com/api/calendar/earnings"
 NASDAQ_HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
 
 
+_MONTH_MAP = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _normalize_fiscal_quarter(raw: str | None) -> str | None:
+    """Convert Nasdaq format 'Dec/2025' to ISO format '2025-12-31'."""
+    if not raw:
+        return None
+    if "/" in raw:
+        parts = raw.split("/")
+        if len(parts) == 2:
+            month_str, year_str = parts
+            month = _MONTH_MAP.get(month_str.strip().lower()[:3])
+            if month and year_str.strip().isdigit():
+                import calendar
+                year = int(year_str.strip())
+                last_day = calendar.monthrange(year, month)[1]
+                return f"{year}-{month:02d}-{last_day:02d}"
+    return raw
+
+
 def _parse_nasdaq_eps_forecast(raw: str | None) -> float | None:
     if not raw or raw.strip() == "":
         return None
@@ -107,7 +130,7 @@ async def _fetch_historical_earnings_nasdaq(
                             "companyName": row.get("name", symbol),
                             "date": current.isoformat(),
                             "time": "",
-                            "fiscalDateEnding": row.get("fiscalQuarterEnding"),
+                            "fiscalDateEnding": _normalize_fiscal_quarter(row.get("fiscalQuarterEnding")),
                             "epsEstimated": _parse_nasdaq_eps_forecast(row.get("epsForecast")),
                         })
             except Exception:
