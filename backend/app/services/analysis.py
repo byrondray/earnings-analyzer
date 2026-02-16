@@ -17,7 +17,7 @@ async def run_analysis_streaming(
 ) -> AsyncGenerator[tuple[str, dict], None]:
     from app.services.cache import get_cached_analysis_redis, set_cached_analysis_redis
 
-    yield ("status", {"step": "cache", "message": "Checking cache..."})
+    yield ("status", {"step": "cache", "message": "Starting analysis..."})
 
     cached = await get_cached_analysis_redis(ticker, quarter)
     if cached:
