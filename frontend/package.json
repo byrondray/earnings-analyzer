@@ -17,5 +17,8 @@
     "tailwindcss": "^4.1.18",
     "vite": "^6.0.0",
     "vitest": "^3.0.0"
+  },
+  "dependencies": {
+    "@clerk/clerk-js": "^5.123.0"
   }
 }
