@@ -11,15 +11,11 @@
   });
 
   function handleClick() {
-    if (!hasReported()) {
-      onError?.('Earnings not reported yet');
-      return;
-    }
     onShowAnalysis({ detail: { ticker: event.ticker, company_name: event.company_name } });
   }
 </script>
 
-<button class="w-full bg-surface-primary/60 border border-border-subtle rounded-xl p-3 transition-all duration-200 text-left text-text-primary font-[inherit] {hasReported() ? 'cursor-pointer hover:not-disabled:bg-surface-elevated hover:not-disabled:border-accent-green/40 hover:not-disabled:shadow-[0_0_12px_rgba(52,172,86,0.1)]' : 'cursor-default opacity-70'}" onclick={handleClick}>
+<button class="w-full bg-surface-primary/60 border border-border-subtle rounded-xl p-3 transition-all duration-200 text-left text-text-primary font-[inherit] cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40 hover:shadow-[0_0_12px_rgba(52,172,86,0.1)]" onclick={handleClick}>
   <div class="flex justify-between items-center mb-1">
     <div class="flex items-center gap-1">
       <span class="font-bold text-sm text-accent-green">{event.ticker}</span>

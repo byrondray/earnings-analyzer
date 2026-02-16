@@ -52,10 +52,6 @@
   }
 
   function handleCardClick(event) {
-    if (!hasReported(event)) {
-      onNavigateToCalendar(event.report_date);
-      return;
-    }
     onShowAnalysis({ detail: { ticker: event.ticker, company_name: event.company_name } });
   }
 
@@ -109,7 +105,7 @@
               {@const fallbackEvent = !event ? findWatchlistEvent(ticker) : null}
               {@const displayEvent = event || fallbackEvent}
               <button
-                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 flex flex-col gap-1.5 {event && hasReported(event) ? 'cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40' : fallbackEvent && hasReported(fallbackEvent) ? 'cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40' : 'cursor-default'}"
+                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 flex flex-col gap-1.5 cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40"
                 onclick={() => displayEvent && handleCardClick(displayEvent)}
               >
                 <div class="flex justify-between items-center">
@@ -202,7 +198,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {#each highlights.this_week.events as event, i}
               <button
-                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 flex flex-col gap-1.5 {hasReported(event) ? 'cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40 hover:shadow-[0_0_12px_rgba(52,172,86,0.1)]' : 'cursor-default'} {i === 0 ? 'glow-green sm:col-span-2 lg:col-span-1' : ''}"
+                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 flex flex-col gap-1.5 cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40 hover:shadow-[0_0_12px_rgba(52,172,86,0.1)] {i === 0 ? 'glow-green sm:col-span-2 lg:col-span-1' : ''}"
                 onclick={() => handleCardClick(event)}
               >
                 {#if i === 0}

@@ -62,7 +62,9 @@
     loadingNews = true;
     try {
       const data = await fetchStockNews(ticker);
-      news = data.articles || [];
+      const articles = data.articles || [];
+      articles.sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0));
+      news = articles;
     } catch {
       news = [];
     } finally {

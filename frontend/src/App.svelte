@@ -74,6 +74,7 @@
     stockCompanyName = companyName;
     window.history.pushState({}, '', `#/stock/${encodeURIComponent(stockTicker)}`);
     currentView = 'stock';
+    window.scrollTo(0, 0);
   }
 
   function handleShowAnalysis(event) {
@@ -91,6 +92,7 @@
     url.hash = '';
     window.history.pushState({}, '', url);
     currentView = 'calendar';
+    window.scrollTo(0, 0);
   }
 
   function navigateToHome() {
@@ -99,6 +101,7 @@
     url.hash = '';
     window.history.pushState({}, '', url);
     currentView = 'home';
+    window.scrollTo(0, 0);
   }
 
   $effect(() => {
@@ -111,6 +114,7 @@
         const params = new URLSearchParams(window.location.search);
         currentView = params.has('week') ? 'calendar' : 'home';
       }
+      window.scrollTo(0, 0);
     }
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);

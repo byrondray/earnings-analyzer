@@ -13,6 +13,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/news", tags=["news"])
 
 
+def _parse_date(date_str: str) -> datetime:
+    if not date_str:
+        return datetime.min
+    for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%S%z"):
+        try:
+            return datetime.strptime(date_str.strip(), fmt).replace(tzinfo=None)
+        except (ValueError, TypeError):
+            continue
+    try:
+        return datetime.fromisoformat(date_str.replace("Z", "+00:00")).replace(tzinfo=None)
+    except Exception:
+        return datetime.min
+
+
+def _sort_by_date_desc(articles: list[dict]) -> list[dict]:
+    return sorted(articles, key=lambda a: _parse_date(a.get("publishedAt", "")), reverse=True)
+
+
 @router.get("/{ticker}")
 async def get_stock_news(
     ticker: str,
@@ -34,6 +52,8 @@ async def get_stock_news(
     if not articles:
         articles = await _fetch_brave_news(upper, settings.BRAVE_SEARCH_API_KEY)
 
+    articles = _sort_by_date_desc(articles)
+
     result = {"ticker": upper, "articles": articles}
     await set_cached(cache_key, result, ttl=3600)
     return JSONResponse(result)
@@ -45,7 +65,7 @@ async def _fetch_newsapi(ticker: str, days: int, api_key: str) -> list[dict]:
     params = {
         "q": f"{ticker} stock earnings",
         "from": from_date,
-        "sortBy": "relevancy",
+        "sortBy": "publishedAt",
         "pageSize": 15,
         "language": "en",
         "apiKey": api_key,
