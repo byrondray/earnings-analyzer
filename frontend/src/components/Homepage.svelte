@@ -1,5 +1,5 @@
 <script>
-  import { fetchHighlights } from '../lib/api.js';
+  import { fetchHighlights, triggerAnalysis, getAnalysis } from '../lib/api.js';
   import { formatLargeNumber, formatDate } from '../lib/utils.js';
 
   let { onShowAnalysis, onNavigateToCalendar } = $props();
@@ -7,6 +7,8 @@
   let highlights = $state(null);
   let loading = $state(true);
   let error = $state(null);
+  let analyzingTicker = $state(null);
+  let analyzeStatus = $state('');
 
   async function loadHighlights() {
     loading = true;
@@ -35,8 +37,47 @@
     return event.report_date < today;
   }
 
-  function handleCardClick(event) {
-    onNavigateToCalendar(event.report_date);
+  function computeQuarter(fiscalQuarter) {
+    if (!fiscalQuarter) return 'Q4-2025';
+    const monthMap = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+    const slashMatch = fiscalQuarter.match(/^([A-Za-z]+)\/([0-9]{4})$/);
+    if (slashMatch) {
+      const mon = monthMap[slashMatch[1].toLowerCase().slice(0, 3)];
+      if (mon) return `Q${Math.ceil(mon / 3)}-${slashMatch[2]}`;
+    }
+    const d = new Date(fiscalQuarter + 'T00:00:00');
+    if (isNaN(d.getTime())) return fiscalQuarter;
+    return `Q${Math.ceil((d.getMonth() + 1) / 3)}-${d.getFullYear()}`;
+  }
+
+  async function handleCardClick(event) {
+    if (!hasReported(event)) {
+      onNavigateToCalendar(event.report_date);
+      return;
+    }
+
+    if (analyzingTicker) return;
+    analyzingTicker = event.ticker;
+    analyzeStatus = 'Starting analysis...';
+
+    try {
+      const cached = await getAnalysis(event.ticker);
+      if (cached) {
+        onShowAnalysis({ detail: { ...cached, company_name: event.company_name } });
+        return;
+      }
+
+      const quarter = computeQuarter(event.fiscal_quarter);
+      const result = await triggerAnalysis(event.ticker, quarter, (msg) => {
+        analyzeStatus = msg;
+      });
+      onShowAnalysis({ detail: { ...result, company_name: event.company_name } });
+    } catch (e) {
+      error = e.message;
+    } finally {
+      analyzingTicker = null;
+      analyzeStatus = '';
+    }
   }
 </script>
 
@@ -82,15 +123,20 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {#each highlights.last_week.events as event, i}
               <button
-                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40 hover:shadow-[0_0_12px_rgba(52,172,86,0.1)] flex flex-col gap-1.5 {i === 0 ? 'glow-green sm:col-span-2 lg:col-span-1' : ''}"
+                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40 hover:shadow-[0_0_12px_rgba(52,172,86,0.1)] flex flex-col gap-1.5 {i === 0 ? 'glow-green sm:col-span-2 lg:col-span-1' : ''} {analyzingTicker === event.ticker ? 'opacity-70 cursor-wait!' : ''}"
                 onclick={() => handleCardClick(event)}
+                disabled={analyzingTicker != null}
               >
                 {#if i === 0}
                   <span class="text-[0.6rem] font-bold uppercase tracking-wider text-accent-gold mb-0.5">🏆 Most Anticipated</span>
                 {/if}
                 <div class="flex justify-between items-center">
                   <span class="font-bold text-base text-accent-green">{event.ticker}</span>
-                  <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-green/15 text-accent-green uppercase">Reported</span>
+                  {#if analyzingTicker === event.ticker}
+                    <span class="inline-block w-3.5 h-3.5 border-2 border-border-subtle border-t-accent-green rounded-full animate-[spin_0.6s_linear_infinite]"></span>
+                  {:else}
+                    <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-green/15 text-accent-green uppercase">Reported</span>
+                  {/if}
                 </div>
                 <div class="text-xs text-text-muted truncate">{event.company_name}</div>
                 <div class="text-xs text-text-muted">{formatDate(event.report_date)}</div>
@@ -99,6 +145,9 @@
                 {/if}
                 {#if event.eps_estimate}
                   <div class="text-xs text-text-muted">EPS Est: <span class="text-text-secondary font-medium">${event.eps_estimate.toFixed(2)}</span></div>
+                {/if}
+                {#if analyzingTicker === event.ticker && analyzeStatus}
+                  <div class="text-[0.65rem] text-accent-green/80 mt-0.5 animate-pulse">{analyzeStatus}</div>
                 {/if}
               </button>
             {/each}
@@ -127,15 +176,18 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {#each highlights.this_week.events as event, i}
               <button
-                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 flex flex-col gap-1.5 {hasReported(event) ? 'cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40 hover:shadow-[0_0_12px_rgba(52,172,86,0.1)]' : 'cursor-default'} {i === 0 ? 'glow-green sm:col-span-2 lg:col-span-1' : ''}"
+                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 flex flex-col gap-1.5 {hasReported(event) ? 'cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40 hover:shadow-[0_0_12px_rgba(52,172,86,0.1)]' : 'cursor-default'} {i === 0 ? 'glow-green sm:col-span-2 lg:col-span-1' : ''} {analyzingTicker === event.ticker ? 'opacity-70 cursor-wait' : ''}"
                 onclick={() => handleCardClick(event)}
+                disabled={analyzingTicker != null}
               >
                 {#if i === 0}
                   <span class="text-[0.6rem] font-bold uppercase tracking-wider text-accent-gold mb-0.5">⭐ Most Anticipated</span>
                 {/if}
                 <div class="flex justify-between items-center">
                   <span class="font-bold text-base text-accent-green">{event.ticker}</span>
-                  {#if hasReported(event)}
+                  {#if analyzingTicker === event.ticker}
+                    <span class="inline-block w-3.5 h-3.5 border-2 border-border-subtle border-t-accent-green rounded-full animate-[spin_0.6s_linear_infinite]"></span>
+                  {:else if hasReported(event)}
                     <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-green/15 text-accent-green uppercase">Reported</span>
                   {:else}
                     <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-gold/15 text-accent-gold uppercase">Upcoming</span>
@@ -148,6 +200,9 @@
                 {/if}
                 {#if event.eps_estimate}
                   <div class="text-xs text-text-muted">EPS Est: <span class="text-text-secondary font-medium">${event.eps_estimate.toFixed(2)}</span></div>
+                {/if}
+                {#if analyzingTicker === event.ticker && analyzeStatus}
+                  <div class="text-[0.65rem] text-accent-green/80 mt-0.5 animate-pulse">{analyzeStatus}</div>
                 {/if}
               </button>
             {/each}

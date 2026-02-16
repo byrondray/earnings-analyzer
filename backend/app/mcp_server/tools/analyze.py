@@ -80,6 +80,17 @@ CRITICAL RULES:
 - You may still provide eps_estimate, revenue_estimate, sentiment (based on market
   expectations), and sentiment_score for upcoming reports.
 
+DATA EXTRACTION PRIORITY:
+- Read the full article text carefully. Financial data is often in the body, not just headlines.
+- For revenue: look for phrases like "revenue of", "sales of", "top line", "total revenue".
+  Convert billions/millions to raw numbers (e.g. "$95.4 billion" = 95400000000).
+- For EPS: look for "earnings per share", "EPS of", "adjusted EPS", "diluted EPS".
+- For price reaction: look for "shares rose/fell", "stock gained/dropped", "after-hours",
+  "pre-market trading", percentage changes in stock price following the report.
+- For guidance: look for "outlook", "expects", "guidance", "forecast", "projects" statements.
+- If the known database EPS/revenue estimates are provided and the articles mention actual
+  numbers, compute the surprise percentages yourself.
+
 Formatting rules:
 - Revenue values should be in raw dollars (e.g., 94.9 billion = 94900000000)
 - EPS values should be in dollars per share
