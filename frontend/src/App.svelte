@@ -17,10 +17,12 @@
   }
 </script>
 
-<main class="max-w-350 mx-auto p-6 min-h-screen text-slate-100 font-sans">
-  <header class="text-center mb-8">
-    <h1 class="text-3xl font-bold mb-1">📊 Earnings Analyzer</h1>
-    <p class="text-slate-400 text-sm">Track and analyze upcoming earnings reports</p>
+<main class="max-w-350 mx-auto p-6 min-h-screen text-text-primary font-sans radial-gradient-bg">
+  <header class="text-center mb-10">
+    <h1 class="text-4xl font-extrabold mb-2 tracking-tight">
+      <span class="text-accent-green">Earnings</span> Analyzer
+    </h1>
+    <p class="text-text-muted text-sm tracking-wide">Track and analyze upcoming earnings reports</p>
   </header>
 
   <StockSearch onShowAnalysis={handleShowAnalysis} />

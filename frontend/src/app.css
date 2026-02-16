@@ -1,4 +1,39 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 @import 'tailwindcss';
+
+@theme {
+  --color-surface-primary: #0c0c0c;
+  --color-surface-card: #1b1b1b;
+  --color-surface-elevated: #1c1c1c;
+  --color-surface-input: #1b1b1b;
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-accent-green: #34AC56;
+  --color-accent-gold: #ffb701;
+  --color-accent-blue: #0075ff;
+  --color-accent-pink: #de0f72;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #f5f5f5;
+  --color-text-muted: #888888;
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+.glass-card-solid {
+  background: #1b1b1b;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.glow-green {
+  box-shadow: 0 0 20px rgba(52, 172, 86, 0.15), 0 0 40px rgba(52, 172, 86, 0.05);
+}
+
+.glow-green-subtle {
+  box-shadow: 0 0 0 1px #34AC56, 0 0 15px rgba(52, 172, 86, 0.2);
+}
+
+.radial-gradient-bg {
+  background: radial-gradient(ellipse at top center, rgba(52, 172, 86, 0.08) 0%, transparent 60%);
+}
 
 @keyframes pulse-skeleton {
   0%,
@@ -13,5 +48,16 @@
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

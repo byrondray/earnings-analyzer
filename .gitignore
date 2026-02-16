@@ -36,3 +36,5 @@ htmlcov/
 
 # Railway
 .railway/
+CLAUDE.md
+settings.local.json

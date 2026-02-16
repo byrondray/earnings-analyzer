@@ -51,30 +51,30 @@
   let hasMiss = $derived(analysisResult && analysisResult.has_reported !== false && analysisResult.eps_surprise_pct < 0);
 </script>
 
-<button class="w-full bg-slate-900 border border-slate-700 rounded-md p-2.5 transition-all text-left text-slate-100 font-[inherit] {hasReported() ? 'cursor-pointer hover:not-disabled:bg-slate-700 hover:not-disabled:border-blue-500 disabled:opacity-70 disabled:cursor-wait' : 'cursor-default opacity-85'}" onclick={handleClick} disabled={analyzing}>
+<button class="w-full bg-surface-primary/60 border border-border-subtle rounded-xl p-3 transition-all duration-200 text-left text-text-primary font-[inherit] {hasReported() ? 'cursor-pointer hover:not-disabled:bg-surface-elevated hover:not-disabled:border-accent-green/40 hover:not-disabled:shadow-[0_0_12px_rgba(52,172,86,0.1)] disabled:opacity-70 disabled:cursor-wait' : 'cursor-default opacity-70'}" onclick={handleClick} disabled={analyzing}>
   <div class="flex justify-between items-center mb-1">
-    <span class="font-bold text-sm text-blue-500">{event.ticker}</span>
+    <span class="font-bold text-sm text-accent-green">{event.ticker}</span>
     {#if analyzing}
-      <span class="inline-block w-3.5 h-3.5 border-2 border-slate-700 border-t-blue-500 rounded-full animate-[spin_0.6s_linear_infinite]"></span>
+      <span class="inline-block w-3.5 h-3.5 border-2 border-border-subtle border-t-accent-green rounded-full animate-[spin_0.6s_linear_infinite]"></span>
     {:else if !hasReported()}
-      <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-500 uppercase">Upcoming</span>
+      <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-gold/15 text-accent-gold uppercase">Upcoming</span>
     {:else if hasBeat}
-      <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded bg-green-500/20 text-green-500 uppercase">Beat</span>
+      <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-green/15 text-accent-green uppercase">Beat</span>
     {:else if hasMiss}
-      <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded bg-red-500/20 text-red-500 uppercase">Miss</span>
+      <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-red-500/15 text-red-400 uppercase">Miss</span>
     {/if}
   </div>
-  <div class="text-xs text-slate-400 truncate mb-0.5">{event.company_name}</div>
+  <div class="text-xs text-text-muted truncate mb-0.5">{event.company_name}</div>
   {#if event.market_cap}
-    <div class="text-xs text-slate-400">Mkt Cap: {formatLargeNumber(event.market_cap)}</div>
+    <div class="text-xs text-text-muted">Mkt Cap: {formatLargeNumber(event.market_cap)}</div>
   {/if}
   {#if event.eps_estimate}
-    <div class="text-xs text-slate-400">EPS Est: ${event.eps_estimate.toFixed(2)}</div>
+    <div class="text-xs text-text-muted">EPS Est: ${event.eps_estimate.toFixed(2)}</div>
   {/if}
   {#if event.revenue_estimate}
-    <div class="text-xs text-slate-400">Rev Est: {formatLargeNumber(event.revenue_estimate)}</div>
+    <div class="text-xs text-text-muted">Rev Est: {formatLargeNumber(event.revenue_estimate)}</div>
   {/if}
   {#if error}
-    <div class="text-[0.65rem] text-red-500 mt-1">⚠️ {error}</div>
+    <div class="text-[0.65rem] text-red-400 mt-1">⚠️ {error}</div>
   {/if}
 </button>
