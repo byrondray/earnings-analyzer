@@ -1,8 +1,9 @@
 <script>
   import { searchStock } from '../lib/api.js';
   import { formatLargeNumber } from '../lib/utils.js';
+  import FavoriteButton from './FavoriteButton.svelte';
 
-  let { onShowAnalysis, onError } = $props();
+  let { onShowAnalysis, onError, user = null, favorites = new Set(), onFavoriteChange } = $props();
 
   let query = $state('');
   let searching = $state(false);
@@ -127,6 +128,7 @@
                 {:else}
                   <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-gold/15 text-accent-gold uppercase">Upcoming</span>
                 {/if}
+                <FavoriteButton ticker={event.ticker} companyName={event.company_name} isFavorited={favorites.has(event.ticker)} {onFavoriteChange} {user} />
               </div>
             </button>
           {/each}

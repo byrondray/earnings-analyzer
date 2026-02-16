@@ -127,7 +127,7 @@
       <p class="text-text-muted text-sm tracking-wide">Track and analyze upcoming earnings reports</p>
     </header>
 
-    <StockSearch onShowAnalysis={handleShowAnalysis} onError={handleError} />
+    <StockSearch onShowAnalysis={handleShowAnalysis} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
 
     {#if currentView === 'home'}
       <Homepage onShowAnalysis={handleShowAnalysis} onNavigateToCalendar={navigateToCalendar} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
