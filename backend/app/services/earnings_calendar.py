@@ -161,6 +161,47 @@ async def _enrich_market_caps(
     return events
 
 
+async def search_ticker(
+    db: AsyncSession, ticker: str
+) -> list[EarningsEvent]:
+    upper_ticker = ticker.upper().strip()
+
+    try:
+        settings = get_settings()
+        params = {
+            "function": "EARNINGS_CALENDAR",
+            "horizon": "3month",
+            "symbol": upper_ticker,
+            "apikey": settings.ALPHA_VANTAGE_API_KEY,
+        }
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(ALPHA_VANTAGE_BASE, params=params)
+            if resp.status_code == 200 and resp.text and not resp.text.startswith("{"):
+                reader = csv.DictReader(io.StringIO(resp.text))
+                av_results = []
+                for row in reader:
+                    av_results.append({
+                        "symbol": row.get("symbol", ""),
+                        "companyName": row.get("name", row.get("symbol", "")),
+                        "date": row.get("reportDate", ""),
+                        "time": row.get("timeOfTheDay", ""),
+                        "fiscalDateEnding": row.get("fiscalDateEnding"),
+                        "epsEstimated": _safe_float(row.get("estimate")),
+                    })
+                if av_results:
+                    await upsert_earnings_events(db, av_results)
+    except Exception:
+        pass
+
+    query = (
+        select(EarningsEvent)
+        .where(EarningsEvent.ticker == upper_ticker)
+        .order_by(EarningsEvent.report_date)
+    )
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
 async def get_week_earnings(
     db: AsyncSession, target_date: date
 ) -> list[EarningsEvent]:

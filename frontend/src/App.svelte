@@ -1,6 +1,7 @@
 <script>
   import WeekCalendar from './components/WeekCalendar.svelte';
   import AnalysisModal from './components/AnalysisModal.svelte';
+  import StockSearch from './components/StockSearch.svelte';
 
   let analysisData = $state(null);
   let showModal = $state(false);
@@ -21,6 +22,8 @@
     <h1 class="text-3xl font-bold mb-1">📊 Earnings Analyzer</h1>
     <p class="text-slate-400 text-sm">Track and analyze upcoming earnings reports</p>
   </header>
+
+  <StockSearch onShowAnalysis={handleShowAnalysis} />
 
   <WeekCalendar onShowAnalysis={handleShowAnalysis} />
 

@@ -38,3 +38,11 @@ export async function getAnalysis(ticker) {
   if (!res.ok) throw new Error(`Failed to get analysis: ${res.status}`);
   return res.json();
 }
+
+export async function searchStock(ticker) {
+  const res = await fetch(
+    `${API_BASE}/calendar/search?ticker=${encodeURIComponent(ticker)}`,
+  );
+  if (!res.ok) throw new Error(`Search failed: ${res.status}`);
+  return res.json();
+}

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.db.models import ReportTime
-from app.services.earnings_calendar import get_week_earnings, week_bounds
+from app.services.earnings_calendar import get_week_earnings, search_ticker, week_bounds
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
@@ -43,6 +43,23 @@ class WeekEarningsResponse(BaseModel):
     week_start: date
     week_end: date
     events: list[EarningsEventResponse]
+
+
+class SearchResponse(BaseModel):
+    ticker: str
+    events: list[EarningsEventResponse]
+
+
+@router.get("/search", response_model=SearchResponse)
+async def search_stock(
+    ticker: str = Query(...),
+    db: AsyncSession = Depends(get_db),
+):
+    events = await search_ticker(db, ticker)
+    return SearchResponse(
+        ticker=ticker.upper().strip(),
+        events=[_to_response(e) for e in events],
+    )
 
 
 @router.get("/week", response_model=WeekEarningsResponse)
