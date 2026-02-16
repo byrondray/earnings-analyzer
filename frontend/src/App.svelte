@@ -1,26 +1,34 @@
 <script>
   import WeekCalendar from './components/WeekCalendar.svelte';
-  import AnalysisModal from './components/AnalysisModal.svelte';
   import StockSearch from './components/StockSearch.svelte';
   import Homepage from './components/Homepage.svelte';
+  import StockDetail from './components/StockDetail.svelte';
   import Toast from './components/Toast.svelte';
   import LandingPage from './components/LandingPage.svelte';
   import { initClerk, signIn, signOut } from './lib/clerk.js';
   import { fetchFavorites } from './lib/api.js';
 
-  let analysisData = $state(null);
-  let showModal = $state(false);
   let errorMessage = $state(null);
   let currentView = $state(getInitialView());
+  let stockTicker = $state(getStockFromUrl());
+  let stockCompanyName = $state('');
 
   let user = $state(null);
   let authReady = $state(false);
   let favorites = $state(new Set());
 
   function getInitialView() {
+    const hash = window.location.hash;
+    if (hash.startsWith('#/stock/')) return 'stock';
     const params = new URLSearchParams(window.location.search);
     if (params.has('week')) return 'calendar';
     return 'home';
+  }
+
+  function getStockFromUrl() {
+    const hash = window.location.hash;
+    const match = hash.match(/^#\/stock\/([^/]+)/);
+    return match ? decodeURIComponent(match[1]).toUpperCase() : '';
   }
 
   $effect(() => {
@@ -61,14 +69,16 @@
     }
   }
 
-  function handleShowAnalysis(event) {
-    analysisData = event.detail;
-    showModal = true;
+  function navigateToStock(ticker, companyName = '') {
+    stockTicker = ticker.toUpperCase();
+    stockCompanyName = companyName;
+    window.history.pushState({}, '', `#/stock/${encodeURIComponent(stockTicker)}`);
+    currentView = 'stock';
   }
 
-  function handleCloseModal() {
-    showModal = false;
-    analysisData = null;
+  function handleShowAnalysis(event) {
+    const detail = event.detail || event;
+    navigateToStock(detail.ticker, detail.company_name || '');
   }
 
   function handleError(msg) {
@@ -78,6 +88,7 @@
   function navigateToCalendar(dateStr) {
     const url = new URL(window.location.href);
     url.searchParams.set('week', dateStr);
+    url.hash = '';
     window.history.pushState({}, '', url);
     currentView = 'calendar';
   }
@@ -85,14 +96,21 @@
   function navigateToHome() {
     const url = new URL(window.location.href);
     url.searchParams.delete('week');
+    url.hash = '';
     window.history.pushState({}, '', url);
     currentView = 'home';
   }
 
   $effect(() => {
     function handlePopState() {
-      const params = new URLSearchParams(window.location.search);
-      currentView = params.has('week') ? 'calendar' : 'home';
+      const hash = window.location.hash;
+      if (hash.startsWith('#/stock/')) {
+        stockTicker = getStockFromUrl();
+        currentView = 'stock';
+      } else {
+        const params = new URLSearchParams(window.location.search);
+        currentView = params.has('week') ? 'calendar' : 'home';
+      }
     }
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -129,14 +147,19 @@
 
     <StockSearch onShowAnalysis={handleShowAnalysis} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
 
-    {#if currentView === 'home'}
+    {#if currentView === 'stock' && stockTicker}
+      <StockDetail
+        ticker={stockTicker}
+        companyName={stockCompanyName}
+        onBack={() => window.history.back()}
+        {user}
+        isFavorited={favorites.has(stockTicker)}
+        onFavoriteChange={handleFavoriteChange}
+      />
+    {:else if currentView === 'home'}
       <Homepage onShowAnalysis={handleShowAnalysis} onNavigateToCalendar={navigateToCalendar} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
     {:else}
       <WeekCalendar onShowAnalysis={handleShowAnalysis} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
-    {/if}
-
-    {#if showModal && analysisData}
-      <AnalysisModal data={analysisData} onClose={handleCloseModal} {user} isFavorited={favorites.has(analysisData.ticker)} onFavoriteChange={handleFavoriteChange} />
     {/if}
 
     {#if errorMessage}

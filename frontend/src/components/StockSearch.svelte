@@ -101,9 +101,8 @@
             <button
               class="flex items-center gap-4 p-3 text-left text-text-primary bg-transparent border-none cursor-pointer hover:bg-surface-elevated/50 transition-all duration-200 font-[inherit]"
               onclick={() => {
-                if (isInPast(event.report_date)) {
-                  onShowAnalysis({ detail: { ticker: event.ticker, company_name: event.company_name } });
-                }
+                onShowAnalysis({ detail: { ticker: event.ticker, company_name: event.company_name } });
+                clearSearch();
               }}
             >
               <div class="flex-1 min-w-0">
