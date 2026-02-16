@@ -8,8 +8,18 @@
   let analysisResult = $state(null);
   let error = $state(null);
 
+  let hasReported = $derived(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return event.report_date < today;
+  });
+
   async function handleClick() {
     if (analyzing) return;
+
+    if (!hasReported()) {
+      error = 'Earnings not reported yet';
+      return;
+    }
 
     analyzing = true;
     error = null;
@@ -41,11 +51,13 @@
   let hasMiss = $derived(analysisResult && analysisResult.has_reported !== false && analysisResult.eps_surprise_pct < 0);
 </script>
 
-<button class="w-full bg-slate-900 border border-slate-700 rounded-md p-2.5 cursor-pointer transition-all text-left text-slate-100 font-[inherit] hover:not-disabled:bg-slate-700 hover:not-disabled:border-blue-500 disabled:opacity-70 disabled:cursor-wait" onclick={handleClick} disabled={analyzing}>
+<button class="w-full bg-slate-900 border border-slate-700 rounded-md p-2.5 transition-all text-left text-slate-100 font-[inherit] {hasReported() ? 'cursor-pointer hover:not-disabled:bg-slate-700 hover:not-disabled:border-blue-500 disabled:opacity-70 disabled:cursor-wait' : 'cursor-default opacity-85'}" onclick={handleClick} disabled={analyzing}>
   <div class="flex justify-between items-center mb-1">
     <span class="font-bold text-sm text-blue-500">{event.ticker}</span>
     {#if analyzing}
       <span class="inline-block w-3.5 h-3.5 border-2 border-slate-700 border-t-blue-500 rounded-full animate-[spin_0.6s_linear_infinite]"></span>
+    {:else if !hasReported()}
+      <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-500 uppercase">Upcoming</span>
     {:else if hasBeat}
       <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded bg-green-500/20 text-green-500 uppercase">Beat</span>
     {:else if hasMiss}

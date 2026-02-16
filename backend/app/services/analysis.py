@@ -65,10 +65,15 @@ async def get_cached_analysis(
     if not analysis:
         return None
 
+    has_reported = True
+    if analysis.raw_analysis and isinstance(analysis.raw_analysis, dict):
+        has_reported = analysis.raw_analysis.get("has_reported", True)
+
     return {
         "id": analysis.id,
         "earnings_event_id": analysis.earnings_event_id,
         "ticker": ticker.upper(),
+        "has_reported": has_reported,
         "eps_estimate": analysis.eps_estimate,
         "eps_actual": analysis.eps_actual,
         "eps_surprise_pct": analysis.eps_surprise_pct,
