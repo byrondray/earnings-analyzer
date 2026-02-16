@@ -42,6 +42,10 @@ ANALYSIS_TOOL = {
                 "type": ["string", "null"],
                 "description": "1-3 sentence summary of forward guidance provided by management. Null if not yet reported.",
             },
+            "financial_highlights": {
+                "type": ["string", "null"],
+                "description": "Key financial metrics from the earnings report: operating income, net income, gross/operating margins, free cash flow, segment breakdowns, YoY comparisons. Use bullet points. Null if not yet reported.",
+            },
             "sentiment": {
                 "type": "string",
                 "enum": ["bullish", "bearish", "neutral"],
@@ -66,39 +70,58 @@ ANALYSIS_TOOL = {
     },
 }
 
-SYSTEM_PROMPT = """You are a financial analyst specializing in earnings report analysis.
-Given search results about a company's earnings report, extract the key financial metrics
-and provide your analysis. Use the earnings_analysis_result tool to return your structured analysis.
+SYSTEM_PROMPT = """You are a senior financial accountant and analyst reviewing a company's quarterly earnings.
+You have been given the actual earnings press release and related coverage. Your job is to
+extract precise financial metrics directly from the primary source data and provide a
+thorough accounting-focused analysis.
+
+Use the earnings_analysis_result tool to return your structured analysis.
 
 CRITICAL RULES:
 - Today's date is important. If the earnings report has NOT been released yet (report date
-  is today or in the future and no actual results are found in the search data), set
-  has_reported=false and return null for: eps_actual, eps_surprise_pct, revenue_actual,
-  revenue_surprise_pct, guidance_summary, and price_reaction_pct.
-- NEVER fabricate or estimate actual earnings numbers. Only use numbers explicitly stated
-  in the search results.
-- You may still provide eps_estimate, revenue_estimate, sentiment (based on market
-  expectations), and sentiment_score for upcoming reports.
+  is today or in the future and no actual results are found), set has_reported=false and
+  return null for all actual/post-report fields.
+- NEVER fabricate numbers. Only use figures explicitly stated in the source material.
+- Prioritize data from PRESS RELEASE sources over news articles — press releases contain
+  the official numbers from the company.
 
-DATA EXTRACTION PRIORITY:
-- Read the full article text carefully. Financial data is often in the body, not just headlines.
-- For revenue: look for phrases like "revenue of", "sales of", "top line", "total revenue".
-  Convert billions/millions to raw numbers (e.g. "$95.4 billion" = 95400000000).
-- For EPS: look for "earnings per share", "EPS of", "adjusted EPS", "diluted EPS".
-- For price reaction: look for "shares rose/fell", "stock gained/dropped", "after-hours",
-  "pre-market trading", percentage changes in stock price following the report.
-- For guidance: look for "outlook", "expects", "guidance", "forecast", "projects" statements.
-- If the known database EPS/revenue estimates are provided and the articles mention actual
-  numbers, compute the surprise percentages yourself.
+FINANCIAL DATA EXTRACTION (accountant perspective):
+- EPS: Look for "earnings per share", "diluted EPS", "adjusted EPS", "net income per share".
+  Use diluted/adjusted EPS if both GAAP and non-GAAP are available, note the distinction.
+- Revenue: "revenue", "net revenue", "total revenue", "net sales". Convert to raw dollars.
+  "$95.4 billion" = 95400000000, "$4.2 million" = 4200000.
+- Operating Income: "operating income", "income from operations", "EBIT".
+- Net Income: "net income", "net earnings", "bottom line".
+- Margins: Gross margin, operating margin — calculate from data if not stated.
+- Free Cash Flow: "free cash flow", "FCF", "cash from operations minus capex".
+- Segment Revenue: Break down by business segment if available.
+- YoY Growth: Compare to year-ago quarter if mentioned.
+
+For financial_highlights, provide a bullet-point breakdown of:
+• Operating income and margin
+• Net income
+• Free cash flow
+• Segment performance (if available)
+• Notable YoY changes
+• Any non-GAAP adjustments or one-time items
+
+PRICE REACTION:
+- Look for "shares rose/fell X%", "stock up/down X%", "after-hours trading",
+  "pre-market", "next trading day". Extract the actual percentage.
+
+GUIDANCE:
+- Look for "outlook", "expects", "guidance", "forecast", "projects", "raised/lowered".
+- Summarize management's forward-looking statements about next quarter or full year.
+
+SURPRISE CALCULATION:
+- If you have both estimate and actual: ((actual - estimate) / |estimate|) * 100
 
 Formatting rules:
-- Revenue values should be in raw dollars (e.g., 94.9 billion = 94900000000)
-- EPS values should be in dollars per share
-- Surprise percentages: ((actual - estimate) / |estimate|) * 100
-- Guidance summary should be concise (1-3 sentences)
-- Sentiment should reflect the overall tone: bullish, bearish, or neutral
-- Sentiment score: 0.0 = no confidence, 1.0 = very confident
-- Price reaction: actual after-hours/next-day price change percentage"""
+- Revenue/income values in raw dollars (94.9 billion = 94900000000)
+- EPS in dollars per share
+- Percentages as numbers (3.2 not "3.2%")
+- Guidance summary: concise 1-3 sentences
+- Financial highlights: bullet points with actual numbers"""
 
 
 def _build_event_context(ticker: str, event_context: dict | None) -> str:

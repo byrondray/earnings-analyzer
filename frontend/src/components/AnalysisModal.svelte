@@ -93,6 +93,14 @@
       <p class="text-sm leading-relaxed text-text-secondary">{data.guidance_summary || (data.has_reported === false ? 'Earnings not yet reported.' : 'No guidance data available.')}</p>
     </div>
 
+    {#if data.financial_highlights || (data.raw_analysis && data.raw_analysis.financial_highlights)}
+      {@const highlights = data.financial_highlights || data.raw_analysis?.financial_highlights}
+      <div class="mb-5">
+        <h3 class="text-xs text-text-muted font-bold mb-2 uppercase tracking-widest">Financial Highlights</h3>
+        <div class="text-sm leading-relaxed text-text-secondary whitespace-pre-line bg-surface-primary/50 rounded-xl p-4 border border-border-subtle">{highlights}</div>
+      </div>
+    {/if}
+
     <div class="mb-5">
       <h3 class="text-xs text-text-muted font-bold mb-2 uppercase tracking-widest">Sentiment</h3>
       <div class="flex items-center gap-3 flex-wrap">
