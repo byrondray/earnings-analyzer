@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 _MAX_PAGES = 3
 _PAGE_TIMEOUT = 8.0
 _MAX_CHARS_PER_PAGE = 6000
-_TOTAL_CHAR_LIMIT = 20000
+_TOTAL_CHAR_LIMIT = 25000
 
 _PRIMARY_SOURCE_DOMAINS = [
     "businesswire.com",
@@ -105,22 +105,31 @@ async def search_earnings_report(ticker: str, quarter: str, company_name: str | 
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         press_results = await _search_brave(client, press_release_query, settings.BRAVE_SEARCH_API_KEY, count=5)
+        await asyncio.sleep(1.1)
         reaction_results = await _search_brave(client, reaction_query, settings.BRAVE_SEARCH_API_KEY, count=3)
 
     all_results = press_results + reaction_results
     if not all_results:
+        logger.error("No Brave search results at all for %s %s — both queries returned empty", ticker, quarter)
         return f"No search results found for {ticker} {quarter} earnings."
+
+    logger.info("Brave returned %d press + %d reaction results for %s %s", len(press_results), len(reaction_results), ticker, quarter)
 
     seen_urls = set()
     primary_urls = []
     secondary_urls = []
+    reaction_urls = []
+
+    press_url_set = {r.get("url", "") for r in press_results}
 
     for r in all_results:
         url = r.get("url", "")
         if not url or url in seen_urls:
             continue
         seen_urls.add(url)
-        if _is_primary_source(url):
+        if url not in press_url_set:
+            reaction_urls.append(r)
+        elif _is_primary_source(url):
             primary_urls.append(r)
         else:
             secondary_urls.append(r)
@@ -133,10 +142,8 @@ async def search_earnings_report(ticker: str, quarter: str, company_name: str | 
         lines.append(f"   {r.get('description', 'No description')}")
         lines.append("")
 
-    # Prioritize press releases, then fill with news articles
-    fetch_order = primary_urls[:3] + secondary_urls[:3]
-    fetch_order = fetch_order[:5]
-    urls = [r.get("url", "") for r in fetch_order if r.get("url")]
+    fetch_order = primary_urls[:3] + reaction_urls[:2] + secondary_urls[:2]
+    fetch_order = fetch_order[:6]
 
     async with httpx.AsyncClient() as client:
         # Give press releases more chars
@@ -164,5 +171,8 @@ async def search_earnings_report(ticker: str, quarter: str, company_name: str | 
         lines.append("")
         total_chars += len(trimmed)
         logger.info("Fetched %d chars from %s (%s)", len(trimmed), url, source_label)
+
+    if total_chars == 0:
+        logger.warning("All page fetches failed for %s %s — Claude will rely on search snippets only", ticker, quarter)
 
     return "\n".join(lines)

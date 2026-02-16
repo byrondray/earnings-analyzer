@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 import httpx
 
@@ -10,9 +11,12 @@ from app.services.cache import (
     set_many_cached_market_caps,
 )
 
+logger = logging.getLogger(__name__)
+
 FMP_PROFILE_URL = "https://financialmodelingprep.com/stable/profile"
 
 _CONCURRENT_LIMIT = 10
+_BATCH_SIZE = 20
 
 
 async def _fetch_market_cap_from_api(
@@ -59,30 +63,34 @@ async def fetch_market_caps_batch(tickers: list[str]) -> dict[str, float | None]
     missing = [t for t in unique_tickers if cached[t] is None]
 
     if missing:
-        semaphore = asyncio.Semaphore(_CONCURRENT_LIMIT)
+        settings = get_settings()
+        batches = [missing[i:i + _BATCH_SIZE] for i in range(0, len(missing), _BATCH_SIZE)]
+        logger.info("Fetching market caps for %d tickers in %d batch(es)", len(missing), len(batches))
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            for batch in batches:
+                symbol_str = ",".join(batch)
+                try:
+                    resp = await client.get(
+                        FMP_PROFILE_URL,
+                        params={"symbol": symbol_str, "apikey": settings.FMP_API_KEY},
+                    )
+                    if resp.status_code != 200:
+                        logger.warning("FMP batch request failed with %d", resp.status_code)
+                        continue
+                    data = resp.json()
+                    if isinstance(data, list):
+                        for profile in data:
+                            t = profile.get("symbol", "").upper()
+                            cap = profile.get("marketCap")
+                            if t and cap is not None:
+                                cached[t] = cap
+                except Exception as e:
+                    logger.warning("FMP batch fetch error: %s", e)
 
-            async def _limited_fetch(t: str) -> tuple[str, float | None]:
-                async with semaphore:
-                    val = await _fetch_market_cap_from_api(t, client)
-                    return (t, val)
-
-            results = await asyncio.gather(
-                *[_limited_fetch(t) for t in missing],
-                return_exceptions=True,
-            )
-
-        to_cache = {}
-        for item in results:
-            if isinstance(item, Exception):
-                continue
-            ticker, cap = item
-            if cap is not None:
-                cached[ticker] = cap
-                to_cache[ticker] = cap
-
+        to_cache = {t: cached[t] for t in missing if cached[t] is not None}
         if to_cache:
             await set_many_cached_market_caps(to_cache)
+            logger.info("Cached market caps for %d/%d tickers", len(to_cache), len(missing))
 
     return cached

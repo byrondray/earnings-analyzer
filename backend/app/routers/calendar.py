@@ -1,3 +1,4 @@
+import logging
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
@@ -8,6 +9,8 @@ from app.db.database import get_db
 from app.db.models import ReportTime
 from app.services.cache import get_cached_highlights, set_cached_highlights
 from app.services.earnings_calendar import get_week_earnings, search_ticker, week_bounds
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
@@ -134,10 +137,12 @@ _HIGHLIGHTS_LIMIT = 10
 @router.get("/highlights", response_model=HighlightsResponse)
 async def get_highlights(
     db: AsyncSession = Depends(get_db),
+    refresh: bool = False,
 ):
-    cached = await get_cached_highlights()
-    if cached:
-        return HighlightsResponse(**cached)
+    if not refresh:
+        cached = await get_cached_highlights()
+        if cached:
+            return HighlightsResponse(**cached)
 
     today = date.today()
 
@@ -153,6 +158,12 @@ async def get_highlights(
     this_top = sorted(
         this_events, key=lambda e: -(e.market_cap or 0)
     )[:_HIGHLIGHTS_LIMIT]
+
+    logger.info(
+        "Highlights: last_week top tickers=%s, this_week top tickers=%s",
+        [(e.ticker, e.market_cap) for e in last_top[:5]],
+        [(e.ticker, e.market_cap) for e in this_top[:5]],
+    )
 
     response = HighlightsResponse(
         last_week=HighlightsSection(

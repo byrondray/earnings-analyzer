@@ -5,7 +5,7 @@ import csv
 import io
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,6 +93,13 @@ def _normalize_fiscal_quarter(raw: str | None) -> str | None:
     return raw
 
 
+def _parse_nasdaq_market_cap(raw: str | None) -> float | None:
+    if not raw or raw.strip() == "" or raw.strip() == "N/A":
+        return None
+    cleaned = raw.replace("$", "").replace(",", "").strip()
+    return _safe_float(cleaned)
+
+
 def _parse_nasdaq_eps_forecast(raw: str | None) -> float | None:
     if not raw or raw.strip() == "":
         return None
@@ -132,6 +139,7 @@ async def _fetch_historical_earnings_nasdaq(
                             "time": "",
                             "fiscalDateEnding": _normalize_fiscal_quarter(row.get("fiscalQuarterEnding")),
                             "epsEstimated": _parse_nasdaq_eps_forecast(row.get("epsForecast")),
+                            "marketCap": _parse_nasdaq_market_cap(row.get("marketCap")),
                         })
             except Exception:
                 pass
@@ -158,17 +166,18 @@ async def upsert_earnings_events(
     for item in events_data:
         if not item.get("symbol") or not item.get("date"):
             continue
-        rows.append(
-            {
-                "ticker": item["symbol"],
-                "company_name": item.get("companyName", item["symbol"]),
-                "report_date": date.fromisoformat(item["date"]),
-                "report_time": _map_report_time(item.get("time")),
-                "fiscal_quarter": item.get("fiscalDateEnding"),
-                "eps_estimate": item.get("epsEstimated"),
-                "revenue_estimate": item.get("revenueEstimated"),
-            }
-        )
+        row = {
+            "ticker": item["symbol"],
+            "company_name": item.get("companyName", item["symbol"]),
+            "report_date": date.fromisoformat(item["date"]),
+            "report_time": _map_report_time(item.get("time")),
+            "fiscal_quarter": item.get("fiscalDateEnding"),
+            "eps_estimate": item.get("epsEstimated"),
+            "revenue_estimate": item.get("revenueEstimated"),
+        }
+        if item.get("marketCap") is not None:
+            row["market_cap"] = item["marketCap"]
+        rows.append(row)
 
     if not rows:
         return []
@@ -182,6 +191,7 @@ async def upsert_earnings_events(
             "fiscal_quarter": stmt.excluded.fiscal_quarter,
             "eps_estimate": stmt.excluded.eps_estimate,
             "revenue_estimate": stmt.excluded.revenue_estimate,
+            "market_cap": func.coalesce(stmt.excluded.market_cap, EarningsEvent.market_cap),
         },
     )
     await db.execute(stmt)
@@ -197,36 +207,54 @@ async def upsert_earnings_events(
 
 logger = logging.getLogger(__name__)
 
-_ENRICH_TIMEOUT = 12
-_MAX_ENRICH_TICKERS = 20
+_ENRICH_TIMEOUT = 30
 
 
-async def _enrich_market_caps(
+async def _enrich_market_caps_from_nasdaq(
     db: AsyncSession, events: list[EarningsEvent]
 ) -> list[EarningsEvent]:
-    from app.services.market_cap import fetch_market_caps_batch
-
     needs_cap = [e for e in events if e.market_cap is None]
-    tickers = list(dict.fromkeys(e.ticker for e in needs_cap))[:_MAX_ENRICH_TICKERS]
-
-    if not tickers:
+    if not needs_cap:
         return events
 
-    logger.info("Enriching market caps for %d tickers", len(tickers))
-    caps = await asyncio.wait_for(
-        fetch_market_caps_batch(tickers), timeout=_ENRICH_TIMEOUT
-    )
-    logger.info("Market cap enrichment done, got %d values", sum(1 for v in caps.values() if v is not None))
+    dates_to_fetch = list(dict.fromkeys(e.report_date for e in needs_cap))
+    logger.info("Enriching market caps from Nasdaq for %d dates", len(dates_to_fetch))
 
+    caps: dict[str, float] = {}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        for d in dates_to_fetch:
+            if d.weekday() >= 5:
+                continue
+            try:
+                resp = await client.get(
+                    NASDAQ_EARNINGS_URL,
+                    params={"date": d.isoformat()},
+                    headers=NASDAQ_HEADERS,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    for row in data.get("data", {}).get("rows") or []:
+                        symbol = row.get("symbol", "")
+                        mcap = _parse_nasdaq_market_cap(row.get("marketCap"))
+                        if symbol and mcap is not None:
+                            caps[symbol] = mcap
+            except Exception as e:
+                logger.warning("Nasdaq market cap fetch failed for %s: %s", d, e)
+
+    updated = 0
     for event in events:
         cap = caps.get(event.ticker)
         if cap is not None and event.market_cap != cap:
             event.market_cap = cap
+            updated += 1
 
-    try:
-        await db.commit()
-    except Exception:
-        await db.rollback()
+    logger.info("Nasdaq enrichment: got %d caps, updated %d events", len(caps), updated)
+
+    if updated:
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
 
     return events
 
@@ -312,7 +340,7 @@ async def get_week_earnings(
             logger.warning("Nasdaq historical fetch failed: %s", e)
 
     try:
-        events = await _enrich_market_caps(db, events)
+        events = await _enrich_market_caps_from_nasdaq(db, events)
     except Exception:
         pass
 
