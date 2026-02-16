@@ -2,7 +2,7 @@
   import { formatDate, isToday, formatReportTime } from '../lib/utils.js';
   import EarningsCard from './EarningsCard.svelte';
 
-  let { dateStr, events, onShowAnalysis } = $props();
+  let { dateStr, events, onShowAnalysis, onError } = $props();
 
   let preMarket = $derived(events.filter(e => e.report_time === 'pre_market'));
   let postMarket = $derived(events.filter(e => e.report_time === 'post_market'));
@@ -24,7 +24,7 @@
       <div class="flex flex-col gap-1.5">
         <span class="text-xs text-text-muted font-semibold uppercase tracking-wide py-1">🌅 Before Market</span>
         {#each preMarket as event}
-          <EarningsCard {event} {onShowAnalysis} />
+          <EarningsCard {event} {onShowAnalysis} {onError} />
         {/each}
       </div>
     {/if}
@@ -33,7 +33,7 @@
       <div class="flex flex-col gap-1.5">
         <span class="text-xs text-text-muted font-semibold uppercase tracking-wide py-1">🌙 After Market</span>
         {#each postMarket as event}
-          <EarningsCard {event} {onShowAnalysis} />
+          <EarningsCard {event} {onShowAnalysis} {onError} />
         {/each}
       </div>
     {/if}
@@ -44,7 +44,7 @@
           <span class="text-xs text-text-muted font-semibold uppercase tracking-wide py-1">{isPast ? '📋 Reported' : '⏰ TBD'}</span>
         {/if}
         {#each unknown as event}
-          <EarningsCard {event} {onShowAnalysis} />
+          <EarningsCard {event} {onShowAnalysis} {onError} />
         {/each}
       </div>
     {/if}

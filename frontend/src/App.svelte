@@ -3,9 +3,11 @@
   import AnalysisModal from './components/AnalysisModal.svelte';
   import StockSearch from './components/StockSearch.svelte';
   import Homepage from './components/Homepage.svelte';
+  import Toast from './components/Toast.svelte';
 
   let analysisData = $state(null);
   let showModal = $state(false);
+  let errorMessage = $state(null);
 
   let currentView = $state(getInitialView());
 
@@ -23,6 +25,10 @@
   function handleCloseModal() {
     showModal = false;
     analysisData = null;
+  }
+
+  function handleError(msg) {
+    errorMessage = typeof msg === 'string' ? msg : msg?.detail ?? 'Something went wrong';
   }
 
   function navigateToCalendar(dateStr) {
@@ -59,15 +65,19 @@
     <p class="text-text-muted text-sm tracking-wide">Track and analyze upcoming earnings reports</p>
   </header>
 
-  <StockSearch onShowAnalysis={handleShowAnalysis} />
+  <StockSearch onShowAnalysis={handleShowAnalysis} onError={handleError} />
 
   {#if currentView === 'home'}
-    <Homepage onShowAnalysis={handleShowAnalysis} onNavigateToCalendar={navigateToCalendar} />
+    <Homepage onShowAnalysis={handleShowAnalysis} onNavigateToCalendar={navigateToCalendar} onError={handleError} />
   {:else}
-    <WeekCalendar onShowAnalysis={handleShowAnalysis} />
+    <WeekCalendar onShowAnalysis={handleShowAnalysis} onError={handleError} />
   {/if}
 
   {#if showModal && analysisData}
     <AnalysisModal data={analysisData} onClose={handleCloseModal} />
+  {/if}
+
+  {#if errorMessage}
+    <Toast message={errorMessage} onDismiss={() => errorMessage = null} />
   {/if}
 </main>

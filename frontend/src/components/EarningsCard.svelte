@@ -2,11 +2,10 @@
   import { triggerAnalysis, getAnalysis } from '../lib/api.js';
   import { formatLargeNumber } from '../lib/utils.js';
 
-  let { event, onShowAnalysis } = $props();
+  let { event, onShowAnalysis, onError } = $props();
 
   let analyzing = $state(false);
   let analysisResult = $state(null);
-  let error = $state(null);
   let statusMessage = $state('');
 
   let hasReported = $derived(() => {
@@ -31,12 +30,11 @@
     if (analyzing) return;
 
     if (!hasReported()) {
-      error = 'Earnings not reported yet';
+      onError?.('Earnings not reported yet');
       return;
     }
 
     analyzing = true;
-    error = null;
     statusMessage = 'Starting analysis...';
 
     try {
@@ -57,7 +55,7 @@
       analysisResult = result;
       onShowAnalysis({ detail: { ...result, company_name: event.company_name } });
     } catch (e) {
-      error = e.message;
+      onError?.(e.message);
     } finally {
       analyzing = false;
       statusMessage = '';
@@ -90,9 +88,6 @@
   {/if}
   {#if event.revenue_estimate}
     <div class="text-xs text-text-muted">Rev Est: {formatLargeNumber(event.revenue_estimate)}</div>
-  {/if}
-  {#if error}
-    <div class="text-[0.65rem] text-red-400 mt-1">⚠️ {error}</div>
   {/if}
   {#if analyzing && statusMessage}
     <div class="text-[0.65rem] text-accent-green/80 mt-1 animate-pulse">{statusMessage}</div>

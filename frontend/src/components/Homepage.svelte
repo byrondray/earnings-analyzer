@@ -2,21 +2,21 @@
   import { fetchHighlights, triggerAnalysis, getAnalysis } from '../lib/api.js';
   import { formatLargeNumber, formatDate } from '../lib/utils.js';
 
-  let { onShowAnalysis, onNavigateToCalendar } = $props();
+  let { onShowAnalysis, onNavigateToCalendar, onError } = $props();
 
   let highlights = $state(null);
   let loading = $state(true);
-  let error = $state(null);
+  let loadError = $state(null);
   let analyzingTicker = $state(null);
   let analyzeStatus = $state('');
 
   async function loadHighlights() {
     loading = true;
-    error = null;
+    loadError = null;
     try {
       highlights = await fetchHighlights();
     } catch (e) {
-      error = e.message;
+      loadError = e.message;
     } finally {
       loading = false;
     }
@@ -73,7 +73,7 @@
       });
       onShowAnalysis({ detail: { ...result, company_name: event.company_name } });
     } catch (e) {
-      error = e.message;
+      onError?.(e.message);
     } finally {
       analyzingTicker = null;
       analyzeStatus = '';
@@ -95,9 +95,9 @@
         </div>
       {/each}
     </div>
-  {:else if error}
+  {:else if loadError}
     <div class="text-center p-12 text-red-400">
-      <p>⚠️ {error}</p>
+      <p>⚠️ {loadError}</p>
       <button class="mt-4 px-5 py-2.5 bg-accent-green text-white border-none rounded-2xl cursor-pointer font-semibold transition-all duration-200 hover:brightness-110" onclick={loadHighlights}>Retry</button>
     </div>
   {:else if highlights}

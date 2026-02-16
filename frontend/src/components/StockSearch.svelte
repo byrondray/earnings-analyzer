@@ -2,12 +2,11 @@
   import { searchStock } from '../lib/api.js';
   import { formatLargeNumber } from '../lib/utils.js';
 
-  let { onShowAnalysis } = $props();
+  let { onShowAnalysis, onError } = $props();
 
   let query = $state('');
   let searching = $state(false);
   let results = $state(null);
-  let error = $state(null);
 
   async function handleSearch(e) {
     e.preventDefault();
@@ -15,14 +14,13 @@
     if (!ticker) return;
 
     searching = true;
-    error = null;
     results = null;
 
     try {
       const data = await searchStock(ticker);
       results = data;
     } catch (err) {
-      error = err.message;
+      if (onError) onError(err.message);
     } finally {
       searching = false;
     }
@@ -31,7 +29,6 @@
   function clearSearch() {
     query = '';
     results = null;
-    error = null;
   }
 
   function formatDateReadable(dateStr) {
@@ -82,11 +79,7 @@
     </button>
   </form>
 
-  {#if error}
-    <div class="mt-3 bg-red-500/10 border border-red-500/30 rounded-2xl p-3 text-sm text-red-400">
-      ⚠️ {error}
-    </div>
-  {/if}
+
 
   {#if results}
     <div class="mt-3 glass-card-solid rounded-2xl overflow-hidden">
