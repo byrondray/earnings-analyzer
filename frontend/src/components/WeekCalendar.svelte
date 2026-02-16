@@ -8,7 +8,20 @@
   let weekData = $state(null);
   let loading = $state(true);
   let error = $state(null);
-  let currentDate = $state(new Date().toISOString().split('T')[0]);
+
+  function getDateFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('week') || new Date().toISOString().split('T')[0];
+  }
+
+  let currentDate = $state(getDateFromUrl());
+
+  function pushDate(dateStr) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('week', dateStr);
+    window.history.pushState({}, '', url);
+    currentDate = dateStr;
+  }
 
   async function loadWeek(dateStr) {
     loading = true;
@@ -26,22 +39,28 @@
     if (!weekData) return;
     const next = new Date(weekData.week_end + 'T00:00:00');
     next.setDate(next.getDate() + 3);
-    currentDate = next.toISOString().split('T')[0];
-    loadWeek(currentDate);
+    pushDate(next.toISOString().split('T')[0]);
   }
 
   function goPrevWeek() {
     if (!weekData) return;
     const prev = new Date(weekData.week_start + 'T00:00:00');
     prev.setDate(prev.getDate() - 3);
-    currentDate = prev.toISOString().split('T')[0];
-    loadWeek(currentDate);
+    pushDate(prev.toISOString().split('T')[0]);
   }
 
   function goToday() {
-    currentDate = new Date().toISOString().split('T')[0];
-    loadWeek(currentDate);
+    pushDate(new Date().toISOString().split('T')[0]);
   }
+
+  function handlePopState() {
+    currentDate = getDateFromUrl();
+  }
+
+  $effect(() => {
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  });
 
   $effect(() => {
     loadWeek(currentDate);
