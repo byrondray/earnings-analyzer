@@ -4,6 +4,7 @@
   import StockSearch from './components/StockSearch.svelte';
   import Homepage from './components/Homepage.svelte';
   import Toast from './components/Toast.svelte';
+  import LandingPage from './components/LandingPage.svelte';
   import { initClerk, signIn, signOut } from './lib/clerk.js';
   import { fetchFavorites } from './lib/api.js';
 
@@ -98,47 +99,48 @@
   });
 </script>
 
-<main class="max-w-350 mx-auto p-6 min-h-screen text-text-primary font-sans radial-gradient-bg">
-  <header class="text-center mb-10 relative">
-    <div class="absolute top-0 right-0">
-      {#if authReady}
-        {#if user}
-          <div class="flex items-center gap-3">
-            <span class="text-sm text-text-muted">{user.firstName ?? user.primaryEmailAddress?.emailAddress}</span>
-            <button
-              class="px-4 py-1.5 text-xs font-semibold bg-surface-card border border-border-subtle rounded-xl text-text-muted cursor-pointer transition-all hover:border-red-400/50 hover:text-red-400"
-              onclick={signOut}
-            >Sign out</button>
-          </div>
-        {:else}
-          <button
-            class="px-5 py-2 text-sm font-semibold bg-accent-green border-none rounded-xl text-white cursor-pointer transition-all hover:brightness-110"
-            onclick={signIn}
-          >Sign in</button>
-        {/if}
-      {/if}
+{#if !authReady}
+  <div class="min-h-screen flex items-center justify-center radial-gradient-bg">
+    <div class="flex flex-col items-center gap-4">
+      <div class="w-8 h-8 border-3 border-border-subtle border-t-accent-green rounded-full animate-spin"></div>
     </div>
-    <button class="bg-transparent border-none cursor-pointer" onclick={navigateToHome}>
-      <h1 class="text-4xl font-extrabold mb-2 tracking-tight">
-        <span class="text-accent-green">Earnings</span> Analyzer
-      </h1>
-    </button>
-    <p class="text-text-muted text-sm tracking-wide">Track and analyze upcoming earnings reports</p>
-  </header>
+  </div>
+{:else if !user}
+  <LandingPage />
+{:else}
+  <main class="max-w-350 mx-auto p-6 min-h-screen text-text-primary font-sans radial-gradient-bg">
+    <header class="text-center mb-10 relative">
+      <div class="absolute top-0 right-0">
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-text-muted">{user.firstName ?? user.primaryEmailAddress?.emailAddress}</span>
+          <button
+            class="px-4 py-1.5 text-xs font-semibold bg-surface-card border border-border-subtle rounded-xl text-text-muted cursor-pointer transition-all hover:border-red-400/50 hover:text-red-400"
+            onclick={signOut}
+          >Sign out</button>
+        </div>
+      </div>
+      <button class="bg-transparent border-none cursor-pointer" onclick={navigateToHome}>
+        <h1 class="text-4xl font-extrabold mb-2 tracking-tight">
+          <span class="text-accent-green">Earnings</span> Analyzer
+        </h1>
+      </button>
+      <p class="text-text-muted text-sm tracking-wide">Track and analyze upcoming earnings reports</p>
+    </header>
 
-  <StockSearch onShowAnalysis={handleShowAnalysis} onError={handleError} />
+    <StockSearch onShowAnalysis={handleShowAnalysis} onError={handleError} />
 
-  {#if currentView === 'home'}
-    <Homepage onShowAnalysis={handleShowAnalysis} onNavigateToCalendar={navigateToCalendar} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
-  {:else}
-    <WeekCalendar onShowAnalysis={handleShowAnalysis} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
-  {/if}
+    {#if currentView === 'home'}
+      <Homepage onShowAnalysis={handleShowAnalysis} onNavigateToCalendar={navigateToCalendar} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
+    {:else}
+      <WeekCalendar onShowAnalysis={handleShowAnalysis} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
+    {/if}
 
-  {#if showModal && analysisData}
-    <AnalysisModal data={analysisData} onClose={handleCloseModal} {user} isFavorited={favorites.has(analysisData.ticker)} onFavoriteChange={handleFavoriteChange} />
-  {/if}
+    {#if showModal && analysisData}
+      <AnalysisModal data={analysisData} onClose={handleCloseModal} {user} isFavorited={favorites.has(analysisData.ticker)} onFavoriteChange={handleFavoriteChange} />
+    {/if}
 
-  {#if errorMessage}
-    <Toast message={errorMessage} onDismiss={() => errorMessage = null} />
-  {/if}
-</main>
+    {#if errorMessage}
+      <Toast message={errorMessage} onDismiss={() => errorMessage = null} />
+    {/if}
+  </main>
+{/if}
