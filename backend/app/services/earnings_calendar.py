@@ -32,9 +32,7 @@ def _map_report_time(raw: str | None) -> ReportTime:
     return ReportTime.UNKNOWN
 
 
-async def fetch_earnings_from_alpha_vantage(
-    start: date, end: date
-) -> list[dict]:
+async def fetch_all_earnings_from_alpha_vantage() -> list[dict]:
     settings = get_settings()
     params = {
         "function": "EARNINGS_CALENDAR",
@@ -54,18 +52,17 @@ async def fetch_earnings_from_alpha_vantage(
         results = []
         for row in reader:
             try:
-                report_date = date.fromisoformat(row.get("reportDate", ""))
+                date.fromisoformat(row.get("reportDate", ""))
             except ValueError:
                 continue
-            if start <= report_date <= end:
-                results.append({
-                    "symbol": row.get("symbol", ""),
-                    "companyName": row.get("name", row.get("symbol", "")),
-                    "date": row.get("reportDate", ""),
-                    "time": row.get("timeOfTheDay", ""),
-                    "fiscalDateEnding": row.get("fiscalDateEnding"),
-                    "epsEstimated": _safe_float(row.get("estimate")),
-                })
+            results.append({
+                "symbol": row.get("symbol", ""),
+                "companyName": row.get("name", row.get("symbol", "")),
+                "date": row.get("reportDate", ""),
+                "time": row.get("timeOfTheDay", ""),
+                "fiscalDateEnding": row.get("fiscalDateEnding"),
+                "epsEstimated": _safe_float(row.get("estimate")),
+            })
         return results
 
 
@@ -202,24 +199,35 @@ async def search_ticker(
     return list(result.scalars().all())
 
 
+async def _sync_alpha_vantage_data(db: AsyncSession):
+    from app.services.cache import should_sync_alpha_vantage, mark_alpha_vantage_synced
+
+    if not await should_sync_alpha_vantage():
+        return
+
+    try:
+        all_data = await fetch_all_earnings_from_alpha_vantage()
+        if all_data:
+            await upsert_earnings_events(db, all_data)
+            logger.info("Synced %d events from Alpha Vantage", len(all_data))
+        await mark_alpha_vantage_synced()
+    except Exception as e:
+        logger.warning("Alpha Vantage sync failed: %s", e)
+
+
 async def get_week_earnings(
     db: AsyncSession, target_date: date
 ) -> list[EarningsEvent]:
     monday, friday = week_bounds(target_date)
 
-    try:
-        fmp_data = await fetch_earnings_from_alpha_vantage(monday, friday)
-        events = await upsert_earnings_events(db, fmp_data)
-    except Exception:
-        events = []
+    await _sync_alpha_vantage_data(db)
 
-    if not events:
-        query = select(EarningsEvent).where(
-            EarningsEvent.report_date >= monday,
-            EarningsEvent.report_date <= friday,
-        ).order_by(EarningsEvent.report_date, EarningsEvent.ticker)
-        result = await db.execute(query)
-        events = list(result.scalars().all())
+    query = select(EarningsEvent).where(
+        EarningsEvent.report_date >= monday,
+        EarningsEvent.report_date <= friday,
+    ).order_by(EarningsEvent.report_date, EarningsEvent.ticker)
+    result = await db.execute(query)
+    events = list(result.scalars().all())
 
     try:
         events = await _enrich_market_caps(db, events)

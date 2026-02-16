@@ -8,6 +8,7 @@ from app.config import get_settings
 _redis_client: redis.Redis | None = None
 
 EARNINGS_CALENDAR_TTL = 4 * 60 * 60  # 4 hours
+AV_SYNC_TTL = 4 * 60 * 60  # 4 hours - throttle Alpha Vantage bulk syncs
 MARKET_CAP_TTL = 24 * 60 * 60  # 24 hours
 
 
@@ -119,5 +120,28 @@ async def set_many_cached_market_caps(caps: dict[str, float]):
         for ticker, cap in caps.items():
             pipe.setex(_market_cap_key(ticker), MARKET_CAP_TTL, str(cap))
         await pipe.execute()
+    except Exception:
+        pass
+
+
+_AV_SYNC_KEY = "earnings:av_last_sync"
+
+
+async def should_sync_alpha_vantage() -> bool:
+    r = await get_redis()
+    if r is None:
+        return True
+    try:
+        return await r.get(_AV_SYNC_KEY) is None
+    except Exception:
+        return True
+
+
+async def mark_alpha_vantage_synced():
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        await r.setex(_AV_SYNC_KEY, AV_SYNC_TTL, "1")
     except Exception:
         pass

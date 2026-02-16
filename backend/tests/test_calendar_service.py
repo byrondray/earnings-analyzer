@@ -6,7 +6,7 @@ import pytest
 from app.services.earnings_calendar import (
     week_bounds,
     _map_report_time,
-    fetch_earnings_from_alpha_vantage,
+    fetch_all_earnings_from_alpha_vantage,
 )
 from app.db.models import ReportTime
 
@@ -75,35 +75,26 @@ def _make_mock_httpx_client(response_text, status_code=200):
     return mock_client
 
 
-class TestFetchEarningsFromAlphaVantage:
+class TestFetchAllEarningsFromAlphaVantage:
     @pytest.mark.asyncio
-    async def test_fetch_returns_parsed_csv_filtered_by_date(self):
+    async def test_fetch_returns_all_parsed_csv(self):
         mock_client = _make_mock_httpx_client(SAMPLE_AV_CSV)
 
         with patch("app.services.earnings_calendar.httpx.AsyncClient", return_value=mock_client):
-            result = await fetch_earnings_from_alpha_vantage(date(2026, 2, 16), date(2026, 2, 20))
+            result = await fetch_all_earnings_from_alpha_vantage()
 
-        assert len(result) == 3
+        assert len(result) == 4
         assert result[0]["symbol"] == "AAPL"
         assert result[1]["symbol"] == "MSFT"
         assert result[2]["symbol"] == "GOOGL"
-
-    @pytest.mark.asyncio
-    async def test_fetch_excludes_out_of_range_dates(self):
-        mock_client = _make_mock_httpx_client(SAMPLE_AV_CSV)
-
-        with patch("app.services.earnings_calendar.httpx.AsyncClient", return_value=mock_client):
-            result = await fetch_earnings_from_alpha_vantage(date(2026, 2, 16), date(2026, 2, 20))
-
-        symbols = [r["symbol"] for r in result]
-        assert "TSLA" not in symbols
+        assert result[3]["symbol"] == "TSLA"
 
     @pytest.mark.asyncio
     async def test_fetch_returns_empty_on_error(self):
         mock_client = _make_mock_httpx_client("", status_code=500)
 
         with patch("app.services.earnings_calendar.httpx.AsyncClient", return_value=mock_client):
-            result = await fetch_earnings_from_alpha_vantage(date(2026, 2, 16), date(2026, 2, 20))
+            result = await fetch_all_earnings_from_alpha_vantage()
 
         assert result == []
 
@@ -112,6 +103,6 @@ class TestFetchEarningsFromAlphaVantage:
         mock_client = _make_mock_httpx_client(SAMPLE_AV_CSV)
 
         with patch("app.services.earnings_calendar.httpx.AsyncClient", return_value=mock_client):
-            result = await fetch_earnings_from_alpha_vantage(date(2026, 2, 16), date(2026, 2, 20))
+            result = await fetch_all_earnings_from_alpha_vantage()
 
         assert result[0]["epsEstimated"] == 2.35
