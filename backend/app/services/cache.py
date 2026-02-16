@@ -221,6 +221,29 @@ async def set_cached_sparkline(ticker: str, prices: list[float]):
         pass
 
 
+async def get_cached(key: str) -> Any | None:
+    r = await get_redis()
+    if r is None:
+        return None
+    try:
+        data = await r.get(key)
+        if data:
+            return json.loads(data)
+    except Exception:
+        pass
+    return None
+
+
+async def set_cached(key: str, value: Any, ttl: int = 3600):
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        await r.setex(key, ttl, json.dumps(value, default=str))
+    except Exception:
+        pass
+
+
 _AV_SYNC_KEY = "earnings:av_last_sync"
 
 

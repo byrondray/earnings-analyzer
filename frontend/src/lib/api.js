@@ -160,3 +160,17 @@ export async function checkFavorites(tickers) {
   const data = await res.json();
   return data.favorites;
 }
+
+export async function fetchStockNews(ticker) {
+  const res = await fetch(`${API_BASE}/news/${encodeURIComponent(ticker)}`);
+  if (!res.ok) return { ticker, articles: [] };
+  return res.json();
+}
+
+export async function fetchChartData(ticker, range = '1M') {
+  const res = await fetch(
+    `${API_BASE}/chart/${encodeURIComponent(ticker)}?range=${encodeURIComponent(range)}`,
+  );
+  if (!res.ok) return { ticker, points: [], meta: {} };
+  return res.json();
+}
