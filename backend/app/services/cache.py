@@ -11,6 +11,7 @@ EARNINGS_CALENDAR_TTL = 4 * 60 * 60  # 4 hours
 AV_SYNC_TTL = 4 * 60 * 60  # 4 hours - throttle Alpha Vantage bulk syncs
 MARKET_CAP_TTL = 24 * 60 * 60  # 24 hours
 ANALYSIS_TTL = 7 * 24 * 60 * 60  # 7 days
+HIGHLIGHTS_TTL = 4 * 60 * 60  # 4 hours
 
 
 async def get_redis() -> redis.Redis | None:
@@ -151,6 +152,36 @@ async def set_cached_analysis_redis(ticker: str, quarter: str, analysis: dict):
             _analysis_key(ticker, quarter),
             ANALYSIS_TTL,
             json.dumps(analysis, default=str),
+        )
+    except Exception:
+        pass
+
+
+_HIGHLIGHTS_KEY = "earnings:highlights"
+
+
+async def get_cached_highlights() -> dict | None:
+    r = await get_redis()
+    if r is None:
+        return None
+    try:
+        data = await r.get(_HIGHLIGHTS_KEY)
+        if data:
+            return json.loads(data)
+    except Exception:
+        pass
+    return None
+
+
+async def set_cached_highlights(highlights: dict):
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        await r.setex(
+            _HIGHLIGHTS_KEY,
+            HIGHLIGHTS_TTL,
+            json.dumps(highlights, default=str),
         )
     except Exception:
         pass

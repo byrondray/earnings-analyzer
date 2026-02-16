@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.db.database import get_db
 from app.db.models import ReportTime
+from app.services.cache import get_cached_highlights, set_cached_highlights
 from app.services.earnings_calendar import get_week_earnings, search_ticker, week_bounds
 
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
@@ -134,6 +135,10 @@ _HIGHLIGHTS_LIMIT = 10
 async def get_highlights(
     db: AsyncSession = Depends(get_db),
 ):
+    cached = await get_cached_highlights()
+    if cached:
+        return HighlightsResponse(**cached)
+
     today = date.today()
 
     last_mon, last_fri = week_bounds(today - timedelta(weeks=1))
@@ -149,7 +154,7 @@ async def get_highlights(
         this_events, key=lambda e: -(e.market_cap or 0)
     )[:_HIGHLIGHTS_LIMIT]
 
-    return HighlightsResponse(
+    response = HighlightsResponse(
         last_week=HighlightsSection(
             week_start=last_mon,
             week_end=last_fri,
@@ -161,3 +166,7 @@ async def get_highlights(
             events=[_to_response(e) for e in this_top],
         ),
     )
+
+    await set_cached_highlights(response.model_dump(mode="json"))
+
+    return response
