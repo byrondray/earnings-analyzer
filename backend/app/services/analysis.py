@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from datetime import datetime
+import logging
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import EarningsAnalysis, EarningsEvent
 from app.mcp_server.tools.web_search import search_earnings_report
 from app.mcp_server.tools.analyze import analyze_earnings
+
+logger = logging.getLogger(__name__)
 
 
 async def run_analysis_streaming(
@@ -21,7 +24,12 @@ async def run_analysis_streaming(
         yield ("result", cached)
         return
 
-    event_query = select(EarningsEvent).where(EarningsEvent.ticker == ticker.upper())
+    event_query = (
+        select(EarningsEvent)
+        .where(EarningsEvent.ticker == ticker.upper())
+        .order_by(EarningsEvent.report_date.desc())
+        .limit(1)
+    )
     event_result = await db.execute(event_query)
     event = event_result.scalar_one_or_none()
 
@@ -39,9 +47,11 @@ async def run_analysis_streaming(
 
     yield ("status", {"step": "search", "message": "Searching for earnings data..."})
     search_results = await search_earnings_report(ticker, quarter, company_name=company_name)
+    logger.info("Search results for %s %s: %d chars", ticker, quarter, len(search_results))
 
     yield ("status", {"step": "analyze", "message": "Reading articles & analyzing with AI..."})
     analysis = await analyze_earnings(ticker, search_results, event_context=event_context)
+    logger.info("Analysis result for %s %s: has_reported=%s", ticker, quarter, analysis.get("has_reported"))
 
     if "error" in analysis:
         yield ("error", analysis)

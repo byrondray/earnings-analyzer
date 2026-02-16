@@ -3,6 +3,8 @@
 
   let { data, onClose } = $props();
 
+  let allNA = $derived(data.eps_estimate == null && data.eps_actual == null && data.revenue_estimate == null && data.revenue_actual == null);
+
   function getSentimentColor(sentiment) {
     if (sentiment === 'bullish') return '#34AC56';
     if (sentiment === 'bearish') return '#ef4444';
@@ -32,6 +34,14 @@
       {/if}
     </header>
 
+    {#if allNA && data.has_reported !== false}
+      <div class="mb-6 bg-accent-gold/10 border border-accent-gold/30 rounded-2xl p-5">
+        <p class="text-sm text-accent-gold font-semibold mb-1">Limited Data Available</p>
+        <p class="text-sm text-text-muted">Insufficient public earnings data was found for this company. This is common for smaller or less-covered stocks. Any available context is shown below.</p>
+      </div>
+    {/if}
+
+    {#if !allNA}
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
       <div class="bg-surface-primary/80 rounded-2xl p-5 border border-border-subtle">
         <h3 class="text-xs text-accent-green font-bold mb-3 uppercase tracking-widest">EPS</h3>
@@ -81,6 +91,7 @@
         </table>
       </div>
     </div>
+    {/if}
 
     {#if data.has_reported === false}
       <div class="mb-5 bg-accent-gold/10 border border-accent-gold/30 rounded-2xl p-4">

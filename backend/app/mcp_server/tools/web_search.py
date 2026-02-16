@@ -88,6 +88,9 @@ async def _search_brave(
             await asyncio.sleep(retry_after)
             backoff *= 2
             continue
+        if resp.status_code == 429:
+            logger.error("Brave rate limit exhausted after %d retries for query: %s", max_retries, query)
+            return []
         resp.raise_for_status()
         data = resp.json()
         return data.get("web", {}).get("results", [])

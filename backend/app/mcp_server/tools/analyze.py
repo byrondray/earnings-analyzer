@@ -1,4 +1,5 @@
 import json
+from datetime import date
 
 import anthropic
 
@@ -84,6 +85,11 @@ CRITICAL RULES:
 - NEVER fabricate numbers. Only use figures explicitly stated in the source material.
 - Prioritize data from PRESS RELEASE sources over news articles — press releases contain
   the official numbers from the company.
+- If the search results contain insufficient data to extract financial metrics, you MUST
+  still provide helpful context in guidance_summary and financial_highlights. Explain what
+  data was or wasn't available, summarize whatever you did find, and note the company's
+  reporting status. Do NOT leave both guidance_summary and financial_highlights null/empty
+  when search results exist — always give the user something useful.
 
 FINANCIAL DATA EXTRACTION (accountant perspective):
 - EPS: Look for "earnings per share", "diluted EPS", "adjusted EPS", "net income per share".
@@ -153,7 +159,7 @@ async def analyze_earnings(ticker: str, earnings_data: str, event_context: dict 
     response = await client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1024,
-        system=SYSTEM_PROMPT,
+        system=f"{SYSTEM_PROMPT}\n\nToday's date: {date.today().isoformat()}",
         tools=[ANALYSIS_TOOL],
         tool_choice={"type": "tool", "name": "earnings_analysis_result"},
         messages=[

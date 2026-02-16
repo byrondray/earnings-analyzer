@@ -11,6 +11,7 @@ EARNINGS_CALENDAR_TTL = 4 * 60 * 60  # 4 hours
 AV_SYNC_TTL = 4 * 60 * 60  # 4 hours - throttle Alpha Vantage bulk syncs
 MARKET_CAP_TTL = 24 * 60 * 60  # 24 hours
 ANALYSIS_TTL = 7 * 24 * 60 * 60  # 7 days
+ANALYSIS_UNREPORTED_TTL = 4 * 60 * 60  # 4 hours for pre-report analyses
 HIGHLIGHTS_TTL = 4 * 60 * 60  # 4 hours
 
 
@@ -148,9 +149,10 @@ async def set_cached_analysis_redis(ticker: str, quarter: str, analysis: dict):
     if r is None:
         return
     try:
+        ttl = ANALYSIS_UNREPORTED_TTL if analysis.get("has_reported") is False else ANALYSIS_TTL
         await r.setex(
             _analysis_key(ticker, quarter),
-            ANALYSIS_TTL,
+            ttl,
             json.dumps(analysis, default=str),
         )
     except Exception:
