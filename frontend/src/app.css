@@ -7,7 +7,7 @@
   --color-surface-elevated: #1c1c1c;
   --color-surface-input: #1b1b1b;
   --color-border-subtle: rgba(255, 255, 255, 0.06);
-  --color-accent-green: #34AC56;
+  --color-accent-green: #34ac56;
   --color-accent-gold: #ffb701;
   --color-accent-blue: #0075ff;
   --color-accent-pink: #de0f72;
@@ -24,15 +24,49 @@
 }
 
 .glow-green {
-  box-shadow: 0 0 20px rgba(52, 172, 86, 0.15), 0 0 40px rgba(52, 172, 86, 0.05);
+  box-shadow:
+    0 0 20px rgba(52, 172, 86, 0.15),
+    0 0 40px rgba(52, 172, 86, 0.05);
 }
 
 .glow-green-subtle {
-  box-shadow: 0 0 0 1px #34AC56, 0 0 15px rgba(52, 172, 86, 0.2);
+  box-shadow:
+    0 0 0 1px #34ac56,
+    0 0 15px rgba(52, 172, 86, 0.2);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 4px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
 }
 
 .radial-gradient-bg {
-  background: radial-gradient(ellipse at top center, rgba(52, 172, 86, 0.08) 0%, transparent 60%);
+  background: radial-gradient(
+    ellipse at top center,
+    rgba(52, 172, 86, 0.08) 0%,
+    transparent 60%
+  );
 }
 
 @keyframes pulse-skeleton {
