@@ -74,3 +74,16 @@ class EarningsAnalysis(Base):
     analyzed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     earnings_event = relationship("EarningsEvent", back_populates="analyses")
+
+
+class UserFavorite(Base):
+    __tablename__ = "user_favorites"
+    __table_args__ = (
+        UniqueConstraint("clerk_user_id", "ticker", name="uq_user_ticker"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    clerk_user_id = Column(String(255), nullable=False, index=True)
+    ticker = Column(String(10), nullable=False, index=True)
+    company_name = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

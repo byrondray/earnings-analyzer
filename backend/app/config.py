@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     POLYGON_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     BRAVE_SEARCH_API_KEY: str = ""
+    CLERK_SECRET_KEY: str = ""
+    CLERK_JWKS_URL: str = ""
 
     model_config = {
         "env_file": _find_env_file(),

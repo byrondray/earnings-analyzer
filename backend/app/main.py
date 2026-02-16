@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 
 from app.db.database import get_engine
 from app.db.models import Base
-from app.routers import calendar, analysis
+from app.routers import calendar, analysis, favorites
 from app.services.cache import close_redis
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -45,6 +45,7 @@ app.add_middleware(
 
 app.include_router(calendar.router)
 app.include_router(analysis.router)
+app.include_router(favorites.router)
 
 
 @app.get("/health")
