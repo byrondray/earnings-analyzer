@@ -236,7 +236,10 @@
                   <span class="text-[0.6rem] font-bold uppercase tracking-wider text-accent-gold mb-0.5">⭐ Most Anticipated</span>
                 {/if}
                 <div class="flex justify-between items-center">
-                  <span class="font-bold text-base text-accent-green">{event.ticker}</span>
+                  <div class="flex items-center gap-1">
+                    <span class="font-bold text-base text-accent-green">{event.ticker}</span>
+                    <FavoriteButton ticker={event.ticker} companyName={event.company_name} isFavorited={favorites.has(event.ticker)} {onFavoriteChange} {user} />
+                  </div>
                   {#if analyzingTicker === event.ticker}
                     <span class="inline-block w-3.5 h-3.5 border-2 border-border-subtle border-t-accent-green rounded-full animate-[spin_0.6s_linear_infinite]"></span>
                   {:else if hasReported(event)}
