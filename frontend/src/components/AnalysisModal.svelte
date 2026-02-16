@@ -2,7 +2,6 @@
   import { formatLargeNumber, formatPercent } from '../lib/utils.js';
 
   let { data, onClose } = $props();
-  let showRaw = $state(false);
 
   function getSentimentColor(sentiment) {
     if (sentiment === 'bullish') return '#34AC56';
@@ -121,15 +120,5 @@
       {/if}
     </div>
 
-    {#if data.raw_analysis}
-      <div class="mb-5">
-        <button class="bg-transparent border-none text-text-muted cursor-pointer text-sm py-1 font-[inherit] hover:text-text-primary transition-colors" onclick={() => showRaw = !showRaw}>
-          {showRaw ? '▼' : '▶'} Raw Analysis Data
-        </button>
-        {#if showRaw}
-          <pre class="bg-surface-primary rounded-2xl p-4 text-xs overflow-x-auto mt-2 text-text-muted font-mono border border-border-subtle">{JSON.stringify(data.raw_analysis, null, 2)}</pre>
-        {/if}
-      </div>
-    {/if}
   </div>
 </div>

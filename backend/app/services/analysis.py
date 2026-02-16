@@ -24,7 +24,7 @@ async def run_analysis_streaming(
     yield ("status", {"step": "search", "message": "Searching for earnings data..."})
     search_results = await search_earnings_report(ticker, quarter)
 
-    yield ("status", {"step": "analyze", "message": "Analyzing with AI..."})
+    yield ("status", {"step": "analyze", "message": "Reading articles & analyzing with AI..."})
     analysis = await analyze_earnings(ticker, search_results)
 
     if "error" in analysis:
