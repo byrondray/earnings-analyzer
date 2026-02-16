@@ -1,5 +1,5 @@
 <script>
-  import { getAnalysis, triggerAnalysis, fetchStockNews, fetchChartData } from '../lib/api.js';
+  import { getAnalysis, triggerAnalysis, fetchStockNews, fetchChartData, searchStock } from '../lib/api.js';
   import { formatLargeNumber, formatPercent } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
 
@@ -14,6 +14,9 @@
   let loadingChart = $state(true);
   let analysisStatus = $state('');
   let analysisError = $state(null);
+  let earningsEvent = $state(null);
+  let hoverIndex = $state(-1);
+  let chartContainer = $state(null);
 
   const RANGES = ['1D', '5D', '1M', '3M', '6M', '1Y', '5Y'];
 
@@ -31,6 +34,7 @@
     loadAnalysis();
     loadNews();
     loadChart(chartRange);
+    loadEarningsEvent();
   }
 
   async function loadAnalysis() {
@@ -69,6 +73,19 @@
       news = [];
     } finally {
       loadingNews = false;
+    }
+  }
+
+  async function loadEarningsEvent() {
+    try {
+      const data = await searchStock(ticker);
+      if (data?.events?.length) {
+        earningsEvent = data.events.reduce((a, b) =>
+          a.report_date > b.report_date ? a : b
+        );
+      }
+    } catch {
+      earningsEvent = null;
     }
   }
 
@@ -165,6 +182,43 @@
     return labels;
   });
 
+  let hoverInfo = $derived.by(() => {
+    if (hoverIndex < 0 || !chartData?.points?.length) return null;
+    const point = chartData.points[hoverIndex];
+    if (!point) return null;
+    const prices = chartData.points.map(p => p.c);
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min || 1;
+    const w = 800;
+    const h = 300;
+    const pad = 8;
+    const usableH = h - pad * 2;
+    const step = w / (prices.length - 1);
+    const x = hoverIndex * step;
+    const y = pad + usableH - ((point.c - min) / range) * usableH;
+    const date = new Date(point.t * 1000);
+    let timeStr;
+    if (chartRange === '1D' || chartRange === '5D') {
+      timeStr = date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    } else {
+      timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    return { x, y, price: point.c, time: timeStr, xPct: (x / w) * 100, yPct: (y / h) * 100 };
+  });
+
+  function handleChartMouseMove(e) {
+    if (!chartContainer || !chartData?.points?.length) return;
+    const rect = chartContainer.getBoundingClientRect();
+    const xPct = (e.clientX - rect.left) / rect.width;
+    const idx = Math.round(xPct * (chartData.points.length - 1));
+    hoverIndex = Math.max(0, Math.min(idx, chartData.points.length - 1));
+  }
+
+  function handleChartMouseLeave() {
+    hoverIndex = -1;
+  }
+
   function formatNewsDate(dateStr) {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -232,7 +286,14 @@
         <div class="w-6 h-6 border-2 border-border-subtle border-t-accent-green rounded-full animate-spin"></div>
       </div>
     {:else if chartData?.points?.length > 1}
-      <div class="relative">
+      <div
+        class="relative cursor-crosshair"
+        bind:this={chartContainer}
+        onmousemove={handleChartMouseMove}
+        onmouseleave={handleChartMouseLeave}
+        role="img"
+        aria-label="Price chart"
+      >
         <svg viewBox="0 0 800 300" class="w-full h-75" preserveAspectRatio="none">
           <defs>
             <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
@@ -245,7 +306,21 @@
           {/each}
           <path d={chartAreaPath} fill="url(#chartGrad)" />
           <path d={chartPath} fill="none" stroke={chartColor} stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" />
+          {#if hoverInfo}
+            <line x1={hoverInfo.x} y1="0" x2={hoverInfo.x} y2="300" stroke="rgba(255,255,255,0.3)" stroke-width="1" stroke-dasharray="4,3" vector-effect="non-scaling-stroke" />
+            <line x1="0" y1={hoverInfo.y} x2="800" y2={hoverInfo.y} stroke="rgba(255,255,255,0.15)" stroke-width="1" stroke-dasharray="4,3" vector-effect="non-scaling-stroke" />
+            <circle cx={hoverInfo.x} cy={hoverInfo.y} r="4" fill={chartColor} stroke="white" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+          {/if}
         </svg>
+        {#if hoverInfo}
+          <div
+            class="absolute pointer-events-none bg-surface-card/95 border border-border-subtle rounded-lg px-3 py-1.5 shadow-lg backdrop-blur-sm"
+            style="left: {hoverInfo.xPct}%; top: 4px; transform: translateX({hoverInfo.xPct > 80 ? '-100%' : hoverInfo.xPct < 20 ? '0%' : '-50%'})"
+          >
+            <span class="text-sm font-bold font-mono text-text-primary">${hoverInfo.price.toFixed(2)}</span>
+            <span class="text-xs text-text-muted ml-2">{hoverInfo.time}</span>
+          </div>
+        {/if}
         <div class="absolute top-0 right-0 flex flex-col items-end gap-0.5 pointer-events-none">
           {#each chartYLabels as label}
             <span class="text-[0.6rem] text-text-muted font-mono" style="position:absolute; top:{label.y}px; transform:translateY(-50%)">${label.value}</span>
@@ -334,7 +409,7 @@
 
         {#if analysis.has_reported === false}
           <div class="bg-accent-gold/10 border border-accent-gold/30 rounded-2xl p-4">
-            <p class="text-sm text-accent-gold">⏳ This company has not reported earnings yet. Estimates and sentiment are based on pre-report market expectations.</p>
+            <p class="text-sm text-accent-gold">⏳ This company has not reported earnings yet.{#if earningsEvent} Earnings are scheduled for <strong>{new Date(earningsEvent.report_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>.{/if} Estimates and sentiment are based on pre-report market expectations.</p>
           </div>
         {/if}
 
