@@ -64,19 +64,33 @@ async def _fetch_page(client: httpx.AsyncClient, url: str, max_chars: int = _MAX
         return ""
 
 
-async def _search_brave(client: httpx.AsyncClient, query: str, api_key: str, count: int = 5) -> list[dict]:
-    resp = await client.get(
-        BRAVE_SEARCH_URL,
-        params={"q": query, "count": count},
-        headers={
-            "Accept": "application/json",
-            "Accept-Encoding": "gzip",
-            "X-Subscription-Token": api_key,
-        },
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return data.get("web", {}).get("results", [])
+async def _search_brave(
+    client: httpx.AsyncClient,
+    query: str,
+    api_key: str,
+    count: int = 5,
+    max_retries: int = 3,
+) -> list[dict]:
+    backoff = 1.0
+    for attempt in range(max_retries + 1):
+        resp = await client.get(
+            BRAVE_SEARCH_URL,
+            params={"q": query, "count": count},
+            headers={
+                "Accept": "application/json",
+                "Accept-Encoding": "gzip",
+                "X-Subscription-Token": api_key,
+            },
+        )
+        if resp.status_code == 429 and attempt < max_retries:
+            retry_after = float(resp.headers.get("Retry-After", backoff))
+            logger.warning("Brave 429 rate-limited, retrying in %.1fs (attempt %d/%d)", retry_after, attempt + 1, max_retries)
+            await asyncio.sleep(retry_after)
+            backoff *= 2
+            continue
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("web", {}).get("results", [])
 
 
 async def search_earnings_report(ticker: str, quarter: str, company_name: str | None = None) -> str:
@@ -87,10 +101,8 @@ async def search_earnings_report(ticker: str, quarter: str, company_name: str | 
     reaction_query = f"{ticker} {quarter} earnings stock price reaction after-hours"
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        press_results, reaction_results = await asyncio.gather(
-            _search_brave(client, press_release_query, settings.BRAVE_SEARCH_API_KEY, count=5),
-            _search_brave(client, reaction_query, settings.BRAVE_SEARCH_API_KEY, count=3),
-        )
+        press_results = await _search_brave(client, press_release_query, settings.BRAVE_SEARCH_API_KEY, count=5)
+        reaction_results = await _search_brave(client, reaction_query, settings.BRAVE_SEARCH_API_KEY, count=3)
 
     all_results = press_results + reaction_results
     if not all_results:
