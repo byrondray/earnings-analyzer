@@ -1,8 +1,9 @@
 <script>
   import { triggerAnalysis, getAnalysis } from '../lib/api.js';
   import { formatLargeNumber } from '../lib/utils.js';
+  import FavoriteButton from './FavoriteButton.svelte';
 
-  let { event, onShowAnalysis, onError } = $props();
+  let { event, onShowAnalysis, onError, user = null, isFavorited = false, onFavoriteChange } = $props();
 
   let analyzing = $state(false);
   let analysisResult = $state(null);
@@ -68,7 +69,10 @@
 
 <button class="w-full bg-surface-primary/60 border border-border-subtle rounded-xl p-3 transition-all duration-200 text-left text-text-primary font-[inherit] {hasReported() ? 'cursor-pointer hover:not-disabled:bg-surface-elevated hover:not-disabled:border-accent-green/40 hover:not-disabled:shadow-[0_0_12px_rgba(52,172,86,0.1)] disabled:opacity-70 disabled:cursor-wait' : 'cursor-default opacity-70'}" onclick={handleClick} disabled={analyzing}>
   <div class="flex justify-between items-center mb-1">
-    <span class="font-bold text-sm text-accent-green">{event.ticker}</span>
+    <div class="flex items-center gap-1">
+      <span class="font-bold text-sm text-accent-green">{event.ticker}</span>
+      <FavoriteButton ticker={event.ticker} companyName={event.company_name} {isFavorited} {onFavoriteChange} {user} />
+    </div>
     {#if analyzing}
       <span class="inline-block w-3.5 h-3.5 border-2 border-border-subtle border-t-accent-green rounded-full animate-[spin_0.6s_linear_infinite]"></span>
     {:else if !hasReported()}

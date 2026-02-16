@@ -2,7 +2,7 @@
   import { formatDate, isToday, formatReportTime } from '../lib/utils.js';
   import EarningsCard from './EarningsCard.svelte';
 
-  let { dateStr, events, onShowAnalysis, onError } = $props();
+  let { dateStr, events, onShowAnalysis, onError, user = null, favorites = new Set(), onFavoriteChange } = $props();
 
   let preMarket = $derived(events.filter(e => e.report_time === 'pre_market'));
   let postMarket = $derived(events.filter(e => e.report_time === 'post_market'));

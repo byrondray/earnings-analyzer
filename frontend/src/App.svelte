@@ -96,7 +96,25 @@
 </script>
 
 <main class="max-w-350 mx-auto p-6 min-h-screen text-text-primary font-sans radial-gradient-bg">
-  <header class="text-center mb-10">
+  <header class="text-center mb-10 relative">
+    <div class="absolute top-0 right-0">
+      {#if authReady}
+        {#if user}
+          <div class="flex items-center gap-3">
+            <span class="text-sm text-text-muted">{user.firstName ?? user.primaryEmailAddress?.emailAddress}</span>
+            <button
+              class="px-4 py-1.5 text-xs font-semibold bg-surface-card border border-border-subtle rounded-xl text-text-muted cursor-pointer transition-all hover:border-red-400/50 hover:text-red-400"
+              onclick={signOut}
+            >Sign out</button>
+          </div>
+        {:else}
+          <button
+            class="px-5 py-2 text-sm font-semibold bg-accent-green border-none rounded-xl text-white cursor-pointer transition-all hover:brightness-110"
+            onclick={signIn}
+          >Sign in</button>
+        {/if}
+      {/if}
+    </div>
     <button class="bg-transparent border-none cursor-pointer" onclick={navigateToHome}>
       <h1 class="text-4xl font-extrabold mb-2 tracking-tight">
         <span class="text-accent-green">Earnings</span> Analyzer
@@ -108,13 +126,13 @@
   <StockSearch onShowAnalysis={handleShowAnalysis} onError={handleError} />
 
   {#if currentView === 'home'}
-    <Homepage onShowAnalysis={handleShowAnalysis} onNavigateToCalendar={navigateToCalendar} onError={handleError} />
+    <Homepage onShowAnalysis={handleShowAnalysis} onNavigateToCalendar={navigateToCalendar} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
   {:else}
-    <WeekCalendar onShowAnalysis={handleShowAnalysis} onError={handleError} />
+    <WeekCalendar onShowAnalysis={handleShowAnalysis} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
   {/if}
 
   {#if showModal && analysisData}
-    <AnalysisModal data={analysisData} onClose={handleCloseModal} />
+    <AnalysisModal data={analysisData} onClose={handleCloseModal} {user} isFavorited={favorites.has(analysisData.ticker)} onFavoriteChange={handleFavoriteChange} />
   {/if}
 
   {#if errorMessage}
