@@ -1,7 +1,8 @@
 <script>
   import { formatLargeNumber, formatPercent } from '../lib/utils.js';
+  import FavoriteButton from './FavoriteButton.svelte';
 
-  let { data, onClose } = $props();
+  let { data, onClose, user = null, isFavorited = false, onFavoriteChange } = $props();
 
   $effect(() => {
     document.body.style.overflow = 'hidden';
@@ -31,7 +32,10 @@
     <button class="absolute top-4 right-4 bg-transparent border-none text-text-muted text-2xl cursor-pointer p-1 leading-none hover:text-text-primary transition-colors" onclick={onClose}>✕</button>
 
     <header class="mb-6 relative">
-      <h2 class="text-3xl font-extrabold text-accent-green tracking-tight">{data.ticker}</h2>
+      <div class="flex items-center gap-2">
+        <h2 class="text-3xl font-extrabold text-accent-green tracking-tight">{data.ticker}</h2>
+        <FavoriteButton ticker={data.ticker} companyName={data.company_name} {isFavorited} {onFavoriteChange} {user} />
+      </div>
       {#if data.company_name}
         <p class="text-text-muted mt-1">{data.company_name}</p>
       {/if}

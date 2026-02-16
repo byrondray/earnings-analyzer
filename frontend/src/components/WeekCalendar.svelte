@@ -3,7 +3,7 @@
   import { getDaysOfWeek, groupByDate } from '../lib/utils.js';
   import DayColumn from './DayColumn.svelte';
 
-  let { onShowAnalysis, onError } = $props();
+  let { onShowAnalysis, onError, user = null, favorites = new Set(), onFavoriteChange } = $props();
 
   let weekData = $state(null);
   let loading = $state(true);
@@ -102,7 +102,7 @@
   {:else}
     <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
       {#each days as day}
-        <DayColumn dateStr={day} events={grouped[day] || []} {onShowAnalysis} {onError} />
+        <DayColumn dateStr={day} events={grouped[day] || []} {onShowAnalysis} {onError} {user} {favorites} {onFavoriteChange} />
       {/each}
     </div>
   {/if}

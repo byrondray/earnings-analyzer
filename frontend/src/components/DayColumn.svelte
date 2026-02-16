@@ -24,7 +24,7 @@
       <div class="flex flex-col gap-1.5">
         <span class="text-xs text-text-muted font-semibold uppercase tracking-wide py-1">🌅 Before Market</span>
         {#each preMarket as event}
-          <EarningsCard {event} {onShowAnalysis} {onError} />
+          <EarningsCard {event} {onShowAnalysis} {onError} {user} isFavorited={favorites.has(event.ticker)} {onFavoriteChange} />
         {/each}
       </div>
     {/if}
@@ -33,7 +33,7 @@
       <div class="flex flex-col gap-1.5">
         <span class="text-xs text-text-muted font-semibold uppercase tracking-wide py-1">🌙 After Market</span>
         {#each postMarket as event}
-          <EarningsCard {event} {onShowAnalysis} {onError} />
+          <EarningsCard {event} {onShowAnalysis} {onError} {user} isFavorited={favorites.has(event.ticker)} {onFavoriteChange} />
         {/each}
       </div>
     {/if}
@@ -44,7 +44,7 @@
           <span class="text-xs text-text-muted font-semibold uppercase tracking-wide py-1">{isPast ? '📋 Reported' : '⏰ TBD'}</span>
         {/if}
         {#each unknown as event}
-          <EarningsCard {event} {onShowAnalysis} {onError} />
+          <EarningsCard {event} {onShowAnalysis} {onError} {user} isFavorited={favorites.has(event.ticker)} {onFavoriteChange} />
         {/each}
       </div>
     {/if}

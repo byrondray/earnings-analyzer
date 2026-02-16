@@ -1,8 +1,9 @@
 <script>
   import { fetchHighlights, triggerAnalysis, getAnalysis } from '../lib/api.js';
   import { formatLargeNumber, formatDate } from '../lib/utils.js';
+  import FavoriteButton from './FavoriteButton.svelte';
 
-  let { onShowAnalysis, onNavigateToCalendar, onError } = $props();
+  let { onShowAnalysis, onNavigateToCalendar, onError, user = null, favorites = new Set(), onFavoriteChange } = $props();
 
   let highlights = $state(null);
   let loading = $state(true);
@@ -79,6 +80,15 @@
       analyzeStatus = '';
     }
   }
+
+  function findEventByTicker(ticker) {
+    if (!highlights) return null;
+    const allEvents = [
+      ...(highlights.last_week?.events || []),
+      ...(highlights.this_week?.events || []),
+    ];
+    return allEvents.find(e => e.ticker === ticker) || null;
+  }
 </script>
 
 <section class="w-full">
@@ -102,6 +112,45 @@
     </div>
   {:else if highlights}
     <div class="flex flex-col gap-10">
+      <!-- Watchlist -->
+      {#if user && favorites.size > 0}
+        <div>
+          <div class="flex justify-between items-center mb-4 px-1">
+            <div>
+              <h2 class="text-lg font-bold text-text-primary">★ My Watchlist</h2>
+              <p class="text-text-muted text-xs mt-0.5">{favorites.size} stock{favorites.size === 1 ? '' : 's'} tracked</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {#each [...favorites] as ticker}
+              {@const event = findEventByTicker(ticker)}
+              <button
+                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 flex flex-col gap-1.5 {event && hasReported(event) ? 'cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40' : 'cursor-default'} {analyzingTicker === ticker ? 'opacity-70 cursor-wait!' : ''}"
+                onclick={() => event && handleCardClick(event)}
+                disabled={analyzingTicker != null}
+              >
+                <div class="flex justify-between items-center">
+                  <span class="font-bold text-base text-accent-green">{ticker}</span>
+                  <FavoriteButton {ticker} companyName={event?.company_name} isFavorited={true} {onFavoriteChange} {user} />
+                </div>
+                {#if event}
+                  <div class="text-xs text-text-muted truncate">{event.company_name}</div>
+                  <div class="text-xs text-text-muted">{formatDate(event.report_date)}</div>
+                  {#if event.market_cap}
+                    <div class="text-xs text-text-muted">Mkt Cap: <span class="text-text-secondary font-medium">{formatLargeNumber(event.market_cap)}</span></div>
+                  {/if}
+                {:else}
+                  <div class="text-xs text-text-muted">No upcoming earnings</div>
+                {/if}
+                {#if analyzingTicker === ticker && analyzeStatus}
+                  <div class="text-[0.65rem] text-accent-green/80 mt-0.5 animate-pulse">{analyzeStatus}</div>
+                {/if}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
       <!-- Last Week's Top Earnings -->
       <div>
         <div class="flex justify-between items-center mb-4 px-1">
@@ -131,7 +180,10 @@
                   <span class="text-[0.6rem] font-bold uppercase tracking-wider text-accent-gold mb-0.5">🏆 Most Anticipated</span>
                 {/if}
                 <div class="flex justify-between items-center">
-                  <span class="font-bold text-base text-accent-green">{event.ticker}</span>
+                  <div class="flex items-center gap-1">
+                    <span class="font-bold text-base text-accent-green">{event.ticker}</span>
+                    <FavoriteButton ticker={event.ticker} companyName={event.company_name} isFavorited={favorites.has(event.ticker)} {onFavoriteChange} {user} />
+                  </div>
                   {#if analyzingTicker === event.ticker}
                     <span class="inline-block w-3.5 h-3.5 border-2 border-border-subtle border-t-accent-green rounded-full animate-[spin_0.6s_linear_infinite]"></span>
                   {:else}
