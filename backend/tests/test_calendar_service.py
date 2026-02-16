@@ -7,6 +7,8 @@ from app.services.earnings_calendar import (
     week_bounds,
     _map_report_time,
     fetch_all_earnings_from_alpha_vantage,
+    _parse_nasdaq_eps_forecast,
+    _fetch_historical_earnings_nasdaq,
 )
 from app.db.models import ReportTime
 
@@ -106,3 +108,96 @@ class TestFetchAllEarningsFromAlphaVantage:
             result = await fetch_all_earnings_from_alpha_vantage()
 
         assert result[0]["epsEstimated"] == 2.35
+
+
+class TestParseNasdaqEpsForecast:
+    def test_normal_value(self):
+        assert _parse_nasdaq_eps_forecast("$2.35") == 2.35
+
+    def test_negative_parenthesized(self):
+        assert _parse_nasdaq_eps_forecast("($0.13)") == -0.13
+
+    def test_empty_string(self):
+        assert _parse_nasdaq_eps_forecast("") is None
+
+    def test_none(self):
+        assert _parse_nasdaq_eps_forecast(None) is None
+
+    def test_no_dollar_sign(self):
+        assert _parse_nasdaq_eps_forecast("1.50") == 1.50
+
+
+class TestFetchHistoricalEarningsNasdaq:
+    @pytest.mark.asyncio
+    async def test_fetches_weekdays_only(self):
+        nasdaq_response = {
+            "data": {
+                "rows": [
+                    {
+                        "symbol": "AAPL",
+                        "name": "Apple Inc.",
+                        "epsForecast": "$2.35",
+                        "time": "time-not-supplied",
+                        "fiscalQuarterEnding": "Dec/2025",
+                    }
+                ]
+            }
+        }
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json = MagicMock(return_value=nasdaq_response)
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.services.earnings_calendar.httpx.AsyncClient", return_value=mock_client):
+            result = await _fetch_historical_earnings_nasdaq(
+                date(2025, 7, 7), date(2025, 7, 11)
+            )
+
+        assert mock_client.get.call_count == 5
+        assert len(result) == 5
+        assert result[0]["symbol"] == "AAPL"
+        assert result[0]["date"] == "2025-07-07"
+        assert result[0]["epsEstimated"] == 2.35
+
+    @pytest.mark.asyncio
+    async def test_skips_weekends(self):
+        nasdaq_response = {"data": {"rows": [{"symbol": "TEST", "name": "Test"}]}}
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json = MagicMock(return_value=nasdaq_response)
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.services.earnings_calendar.httpx.AsyncClient", return_value=mock_client):
+            result = await _fetch_historical_earnings_nasdaq(
+                date(2025, 7, 5), date(2025, 7, 6)
+            )
+
+        assert mock_client.get.call_count == 0
+        assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_handles_api_error_gracefully(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+
+        mock_client = MagicMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.services.earnings_calendar.httpx.AsyncClient", return_value=mock_client):
+            result = await _fetch_historical_earnings_nasdaq(
+                date(2025, 7, 7), date(2025, 7, 11)
+            )
+
+        assert result == []

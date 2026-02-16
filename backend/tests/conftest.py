@@ -16,36 +16,35 @@ def event_loop():
 
 
 @pytest.fixture
-def sample_fmp_response():
-    return [
-        {
-            "date": "2026-02-16",
-            "symbol": "AAPL",
-            "companyName": "Apple Inc.",
-            "time": "amc",
-            "epsEstimated": 2.35,
-            "revenueEstimated": 94900000000,
-            "fiscalDateEnding": "2025-12-31",
-        },
-        {
-            "date": "2026-02-17",
-            "symbol": "MSFT",
-            "companyName": "Microsoft Corporation",
-            "time": "bmo",
-            "epsEstimated": 3.12,
-            "revenueEstimated": 65800000000,
-            "fiscalDateEnding": "2025-12-31",
-        },
-        {
-            "date": "2026-02-18",
-            "symbol": "GOOGL",
-            "companyName": "Alphabet Inc.",
-            "time": "amc",
-            "epsEstimated": 1.87,
-            "revenueEstimated": 86200000000,
-            "fiscalDateEnding": "2025-12-31",
-        },
-    ]
+def sample_nasdaq_response():
+    return {
+        "data": {
+            "rows": [
+                {
+                    "symbol": "AAPL",
+                    "name": "Apple Inc.",
+                    "eps": "$2.45",
+                    "epsForecast": "$2.35",
+                    "surprise": "$0.10",
+                    "time": "time-not-supplied",
+                    "marketCap": "$3,450,000,000,000",
+                    "fiscalQuarterEnding": "Dec/2025",
+                    "noOfEsts": "30",
+                },
+                {
+                    "symbol": "MSFT",
+                    "name": "Microsoft Corporation",
+                    "eps": "$3.25",
+                    "epsForecast": "$3.12",
+                    "surprise": "$0.13",
+                    "time": "time-not-supplied",
+                    "marketCap": "$2,800,000,000,000",
+                    "fiscalQuarterEnding": "Dec/2025",
+                    "noOfEsts": "28",
+                },
+            ]
+        }
+    }
 
 
 @pytest.fixture

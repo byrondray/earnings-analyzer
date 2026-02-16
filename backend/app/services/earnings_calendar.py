@@ -66,6 +66,56 @@ async def fetch_all_earnings_from_alpha_vantage() -> list[dict]:
         return results
 
 
+NASDAQ_EARNINGS_URL = "https://api.nasdaq.com/api/calendar/earnings"
+NASDAQ_HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+
+
+def _parse_nasdaq_eps_forecast(raw: str | None) -> float | None:
+    if not raw or raw.strip() == "":
+        return None
+    cleaned = raw.replace("$", "").replace(",", "").strip()
+    if cleaned.startswith("(") and cleaned.endswith(")"):
+        cleaned = "-" + cleaned[1:-1]
+    return _safe_float(cleaned)
+
+
+async def _fetch_historical_earnings_nasdaq(
+    start: date, end: date
+) -> list[dict]:
+    results = []
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        current = start
+        while current <= end:
+            if current.weekday() >= 5:
+                current += timedelta(days=1)
+                continue
+            try:
+                resp = await client.get(
+                    NASDAQ_EARNINGS_URL,
+                    params={"date": current.isoformat()},
+                    headers=NASDAQ_HEADERS,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    rows = data.get("data", {}).get("rows") or []
+                    for row in rows:
+                        symbol = row.get("symbol", "")
+                        if not symbol:
+                            continue
+                        results.append({
+                            "symbol": symbol,
+                            "companyName": row.get("name", symbol),
+                            "date": current.isoformat(),
+                            "time": "",
+                            "fiscalDateEnding": row.get("fiscalQuarterEnding"),
+                            "epsEstimated": _parse_nasdaq_eps_forecast(row.get("epsForecast")),
+                        })
+            except Exception:
+                pass
+            current += timedelta(days=1)
+    return results
+
+
 def _safe_float(val: str | None) -> float | None:
     if not val or val.strip() == "":
         return None
@@ -228,6 +278,15 @@ async def get_week_earnings(
     ).order_by(EarningsEvent.report_date, EarningsEvent.ticker)
     result = await db.execute(query)
     events = list(result.scalars().all())
+
+    if not events and friday < date.today():
+        try:
+            nasdaq_data = await _fetch_historical_earnings_nasdaq(monday, friday)
+            if nasdaq_data:
+                events = await upsert_earnings_events(db, nasdaq_data)
+                logger.info("Fetched %d historical events from Nasdaq for %s", len(events), monday)
+        except Exception as e:
+            logger.warning("Nasdaq historical fetch failed: %s", e)
 
     try:
         events = await _enrich_market_caps(db, events)
