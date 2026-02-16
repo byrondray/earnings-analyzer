@@ -45,6 +45,17 @@ class WeekEarningsResponse(BaseModel):
     events: list[EarningsEventResponse]
 
 
+class HighlightsSection(BaseModel):
+    week_start: date
+    week_end: date
+    events: list[EarningsEventResponse]
+
+
+class HighlightsResponse(BaseModel):
+    last_week: HighlightsSection
+    this_week: HighlightsSection
+
+
 class SearchResponse(BaseModel):
     ticker: str
     events: list[EarningsEventResponse]
@@ -113,4 +124,40 @@ async def get_prev_week(
         week_start=monday,
         week_end=friday,
         events=[_to_response(e) for e in events],
+    )
+
+
+_HIGHLIGHTS_LIMIT = 10
+
+
+@router.get("/highlights", response_model=HighlightsResponse)
+async def get_highlights(
+    db: AsyncSession = Depends(get_db),
+):
+    today = date.today()
+
+    last_mon, last_fri = week_bounds(today - timedelta(weeks=1))
+    this_mon, this_fri = week_bounds(today)
+
+    last_events = await get_week_earnings(db, last_mon)
+    this_events = await get_week_earnings(db, this_mon)
+
+    last_top = sorted(
+        last_events, key=lambda e: -(e.market_cap or 0)
+    )[:_HIGHLIGHTS_LIMIT]
+    this_top = sorted(
+        this_events, key=lambda e: -(e.market_cap or 0)
+    )[:_HIGHLIGHTS_LIMIT]
+
+    return HighlightsResponse(
+        last_week=HighlightsSection(
+            week_start=last_mon,
+            week_end=last_fri,
+            events=[_to_response(e) for e in last_top],
+        ),
+        this_week=HighlightsSection(
+            week_start=this_mon,
+            week_end=this_fri,
+            events=[_to_response(e) for e in this_top],
+        ),
     )

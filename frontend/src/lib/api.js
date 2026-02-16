@@ -80,3 +80,9 @@ export async function searchStock(ticker) {
   if (!res.ok) throw new Error(`Search failed: ${res.status}`);
   return res.json();
 }
+
+export async function fetchHighlights() {
+  const res = await fetch(`${API_BASE}/calendar/highlights`);
+  if (!res.ok) throw new Error(`Failed to fetch highlights: ${res.status}`);
+  return res.json();
+}
