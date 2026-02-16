@@ -145,9 +145,12 @@ async def get_highlights(
             return HighlightsResponse(**cached)
 
     today = date.today()
+    anchor = today
+    if anchor.weekday() >= 5:
+        anchor = anchor + timedelta(days=(7 - anchor.weekday()))
 
-    last_mon, last_fri = week_bounds(today - timedelta(weeks=1))
-    this_mon, this_fri = week_bounds(today)
+    last_mon, last_fri = week_bounds(anchor - timedelta(weeks=1))
+    this_mon, this_fri = week_bounds(anchor)
 
     last_events = await get_week_earnings(db, last_mon)
     this_events = await get_week_earnings(db, this_mon)

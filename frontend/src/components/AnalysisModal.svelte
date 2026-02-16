@@ -3,6 +3,11 @@
 
   let { data, onClose } = $props();
 
+  $effect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  });
+
   let allNA = $derived(data.eps_estimate == null && data.eps_actual == null && data.revenue_estimate == null && data.revenue_actual == null);
 
   function getSentimentColor(sentiment) {
@@ -20,7 +25,7 @@
 
 <div class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-1000 p-4" onclick={onClose} onkeydown={(e) => e.key === 'Escape' && onClose()} role="dialog" aria-modal="true" tabindex="-1">
   <div class="bg-surface-card rounded-3xl border border-border-subtle max-w-160 w-full max-h-[90vh] overflow-hidden relative shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="presentation">
-    <div class="overflow-y-auto max-h-[90vh] p-8">
+    <div class="overflow-y-auto max-h-[90vh] overscroll-contain p-8">
     <div class="absolute top-0 left-0 right-0 h-40 bg-linear-to-b from-accent-green/5 to-transparent rounded-t-3xl pointer-events-none"></div>
 
     <button class="absolute top-4 right-4 bg-transparent border-none text-text-muted text-2xl cursor-pointer p-1 leading-none hover:text-text-primary transition-colors" onclick={onClose}>✕</button>
