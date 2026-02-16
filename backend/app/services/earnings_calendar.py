@@ -123,6 +123,27 @@ async def upsert_earnings_events(
     return list(result.scalars().all())
 
 
+async def _enrich_market_caps(
+    db: AsyncSession, events: list[EarningsEvent]
+) -> list[EarningsEvent]:
+    from app.services.market_cap import fetch_market_caps_batch
+
+    tickers = [e.ticker for e in events]
+    caps = await fetch_market_caps_batch(tickers)
+
+    for event in events:
+        cap = caps.get(event.ticker)
+        if cap is not None and event.market_cap != cap:
+            event.market_cap = cap
+
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+
+    return events
+
+
 async def get_week_earnings(
     db: AsyncSession, target_date: date
 ) -> list[EarningsEvent]:
@@ -142,4 +163,12 @@ async def get_week_earnings(
         result = await db.execute(query)
         events = list(result.scalars().all())
 
-    return sorted(events, key=lambda e: (e.report_date, e.ticker))
+    try:
+        events = await _enrich_market_caps(db, events)
+    except Exception:
+        pass
+
+    return sorted(
+        events,
+        key=lambda e: (e.report_date, -(e.market_cap or 0), e.ticker),
+    )

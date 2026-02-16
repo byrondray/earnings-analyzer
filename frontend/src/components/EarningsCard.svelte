@@ -53,6 +53,9 @@
     {/if}
   </div>
   <div class="text-xs text-slate-400 truncate mb-0.5">{event.company_name}</div>
+  {#if event.market_cap}
+    <div class="text-xs text-slate-400">Mkt Cap: {formatLargeNumber(event.market_cap)}</div>
+  {/if}
   {#if event.eps_estimate}
     <div class="text-xs text-slate-400">EPS Est: ${event.eps_estimate.toFixed(2)}</div>
   {/if}

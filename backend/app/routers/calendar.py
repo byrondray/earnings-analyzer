@@ -11,6 +11,20 @@ from app.services.earnings_calendar import get_week_earnings, week_bounds
 router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
 
+def _to_response(e: object) -> "EarningsEventResponse":
+    return EarningsEventResponse(
+        id=e.id,
+        ticker=e.ticker,
+        company_name=e.company_name,
+        report_date=e.report_date,
+        report_time=e.report_time.value if isinstance(e.report_time, ReportTime) else str(e.report_time),
+        fiscal_quarter=e.fiscal_quarter,
+        eps_estimate=e.eps_estimate,
+        revenue_estimate=e.revenue_estimate,
+        market_cap=e.market_cap,
+    )
+
+
 class EarningsEventResponse(BaseModel):
     id: int
     ticker: str
@@ -20,6 +34,7 @@ class EarningsEventResponse(BaseModel):
     fiscal_quarter: str | None
     eps_estimate: float | None
     revenue_estimate: float | None
+    market_cap: float | None = None
 
     model_config = {"from_attributes": True}
 
@@ -44,19 +59,7 @@ async def get_calendar_week(
     return WeekEarningsResponse(
         week_start=monday,
         week_end=friday,
-        events=[
-            EarningsEventResponse(
-                id=e.id,
-                ticker=e.ticker,
-                company_name=e.company_name,
-                report_date=e.report_date,
-                report_time=e.report_time.value if isinstance(e.report_time, ReportTime) else str(e.report_time),
-                fiscal_quarter=e.fiscal_quarter,
-                eps_estimate=e.eps_estimate,
-                revenue_estimate=e.revenue_estimate,
-            )
-            for e in events
-        ],
+        events=[_to_response(e) for e in events],
     )
 
 
@@ -74,19 +77,7 @@ async def get_next_week(
     return WeekEarningsResponse(
         week_start=monday,
         week_end=friday,
-        events=[
-            EarningsEventResponse(
-                id=e.id,
-                ticker=e.ticker,
-                company_name=e.company_name,
-                report_date=e.report_date,
-                report_time=e.report_time.value if isinstance(e.report_time, ReportTime) else str(e.report_time),
-                fiscal_quarter=e.fiscal_quarter,
-                eps_estimate=e.eps_estimate,
-                revenue_estimate=e.revenue_estimate,
-            )
-            for e in events
-        ],
+        events=[_to_response(e) for e in events],
     )
 
 
@@ -104,17 +95,5 @@ async def get_prev_week(
     return WeekEarningsResponse(
         week_start=monday,
         week_end=friday,
-        events=[
-            EarningsEventResponse(
-                id=e.id,
-                ticker=e.ticker,
-                company_name=e.company_name,
-                report_date=e.report_date,
-                report_time=e.report_time.value if isinstance(e.report_time, ReportTime) else str(e.report_time),
-                fiscal_quarter=e.fiscal_quarter,
-                eps_estimate=e.eps_estimate,
-                revenue_estimate=e.revenue_estimate,
-            )
-            for e in events
-        ],
+        events=[_to_response(e) for e in events],
     )

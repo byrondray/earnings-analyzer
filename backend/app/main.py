@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import get_engine
 from app.db.models import Base
 from app.routers import calendar, analysis
+from app.services.cache import close_redis
 
 
 @asynccontextmanager
@@ -14,6 +15,7 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
+    await close_redis()
     await engine.dispose()
 
 

@@ -47,6 +47,7 @@ class EarningsEvent(Base):
     fiscal_quarter = Column(String(20), nullable=True)
     eps_estimate = Column(Float, nullable=True)
     revenue_estimate = Column(Float, nullable=True)
+    market_cap = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     analyses = relationship("EarningsAnalysis", back_populates="earnings_event")

@@ -4,6 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     DATABASE_URL: str = ""
+    REDIS_URL: str = ""
     FMP_API_KEY: str = ""
     ALPHA_VANTAGE_API_KEY: str = ""
     NEWS_API_KEY: str = ""
