@@ -1,5 +1,5 @@
 <script>
-  import { fetchHighlights, triggerAnalysis, getAnalysis } from '../lib/api.js';
+  import { fetchHighlights, triggerAnalysis, getAnalysis, searchStock } from '../lib/api.js';
   import { formatLargeNumber, formatDate } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
 
@@ -10,6 +10,7 @@
   let loadError = $state(null);
   let analyzingTicker = $state(null);
   let analyzeStatus = $state('');
+  let watchlistEvents = $state(new Map());
 
   async function loadHighlights() {
     loading = true;
@@ -25,6 +26,19 @@
 
   $effect(() => {
     loadHighlights();
+  });
+
+  $effect(() => {
+    if (!highlights || !user || favorites.size === 0) return;
+    const missing = [...favorites].filter(t => !findEventByTicker(t));
+    missing.forEach(async (ticker) => {
+      if (watchlistEvents.has(ticker)) return;
+      const result = await searchStock(ticker).catch(() => null);
+      if (result?.events?.length) {
+        const nearest = result.events.reduce((a, b) => a.report_date < b.report_date ? a : b);
+        watchlistEvents = new Map(watchlistEvents).set(ticker, nearest);
+      }
+    });
   });
 
   function formatWeekRange(start, end) {
@@ -89,6 +103,10 @@
     ];
     return allEvents.find(e => e.ticker === ticker) || null;
   }
+
+  function findWatchlistEvent(ticker) {
+    return watchlistEvents.get(ticker) || null;
+  }
 </script>
 
 <section class="w-full">
@@ -124,23 +142,25 @@
           <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             {#each [...favorites] as ticker}
               {@const event = findEventByTicker(ticker)}
+              {@const fallbackEvent = !event ? findWatchlistEvent(ticker) : null}
+              {@const displayEvent = event || fallbackEvent}
               <button
-                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 flex flex-col gap-1.5 {event && hasReported(event) ? 'cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40' : 'cursor-default'} {analyzingTicker === ticker ? 'opacity-70 cursor-wait!' : ''}"
-                onclick={() => event && handleCardClick(event)}
+                class="glass-card-solid rounded-2xl p-4 text-left transition-all duration-200 flex flex-col gap-1.5 {event && hasReported(event) ? 'cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40' : fallbackEvent && hasReported(fallbackEvent) ? 'cursor-pointer hover:bg-surface-elevated hover:border-accent-green/40' : 'cursor-default'} {analyzingTicker === ticker ? 'opacity-70 cursor-wait!' : ''}"
+                onclick={() => displayEvent && handleCardClick(displayEvent)}
                 disabled={analyzingTicker != null}
               >
                 <div class="flex justify-between items-center">
                   <span class="font-bold text-base text-accent-green">{ticker}</span>
-                  <FavoriteButton {ticker} companyName={event?.company_name} isFavorited={true} {onFavoriteChange} {user} />
+                  <FavoriteButton {ticker} companyName={displayEvent?.company_name} isFavorited={true} {onFavoriteChange} {user} />
                 </div>
-                {#if event}
-                  <div class="text-xs text-text-muted truncate">{event.company_name}</div>
-                  <div class="text-xs text-text-muted">{formatDate(event.report_date)}</div>
-                  {#if event.market_cap}
-                    <div class="text-xs text-text-muted">Mkt Cap: <span class="text-text-secondary font-medium">{formatLargeNumber(event.market_cap)}</span></div>
+                {#if displayEvent}
+                  <div class="text-xs text-text-muted truncate">{displayEvent.company_name}</div>
+                  <div class="text-xs text-text-muted">{formatDate(displayEvent.report_date)}</div>
+                  {#if displayEvent.market_cap}
+                    <div class="text-xs text-text-muted">Mkt Cap: <span class="text-text-secondary font-medium">{formatLargeNumber(displayEvent.market_cap)}</span></div>
                   {/if}
                 {:else}
-                  <div class="text-xs text-text-muted">No upcoming earnings</div>
+                  <div class="text-xs text-text-muted">Loading earnings date...</div>
                 {/if}
                 {#if analyzingTicker === ticker && analyzeStatus}
                   <div class="text-[0.65rem] text-accent-green/80 mt-0.5 animate-pulse">{analyzeStatus}</div>
