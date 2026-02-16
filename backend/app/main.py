@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,13 +15,23 @@ from app.routers import calendar, analysis, favorites
 from app.services.cache import close_redis
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    for attempt in range(5):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            break
+        except Exception as exc:
+            if attempt == 4:
+                raise
+            wait = 2 ** attempt
+            logger.warning("DB connect attempt %d failed (%s), retrying in %ds...", attempt + 1, exc, wait)
+            await asyncio.sleep(wait)
     yield
     await close_redis()
     await engine.dispose()
