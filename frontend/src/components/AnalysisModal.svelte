@@ -38,18 +38,20 @@
           <tbody>
             <tr>
               <td class="py-1.5 text-sm">Estimate</td>
-              <td class="py-1.5 text-sm text-right font-semibold font-mono">${data.eps_estimate?.toFixed(2) ?? 'N/A'}</td>
+              <td class="py-1.5 text-sm text-right font-semibold font-mono">{data.eps_estimate != null ? `$${data.eps_estimate.toFixed(2)}` : 'N/A'}</td>
             </tr>
+            {#if data.has_reported !== false}
             <tr>
               <td class="py-1.5 text-sm">Actual</td>
-              <td class="py-1.5 text-sm text-right font-semibold font-mono">${data.eps_actual?.toFixed(2) ?? 'N/A'}</td>
+              <td class="py-1.5 text-sm text-right font-semibold font-mono">{data.eps_actual != null ? `$${data.eps_actual.toFixed(2)}` : 'N/A'}</td>
             </tr>
             <tr>
               <td class="py-1.5 text-sm">Surprise</td>
               <td class="py-1.5 text-sm text-right font-semibold font-mono {data.eps_surprise_pct > 0 ? 'text-green-500' : data.eps_surprise_pct < 0 ? 'text-red-500' : ''}">
-                {formatPercent(data.eps_surprise_pct)}
+                {data.eps_surprise_pct != null ? formatPercent(data.eps_surprise_pct) : 'N/A'}
               </td>
             </tr>
+            {/if}
           </tbody>
         </table>
       </div>
@@ -62,24 +64,32 @@
               <td class="py-1.5 text-sm">Estimate</td>
               <td class="py-1.5 text-sm text-right font-semibold font-mono">{formatLargeNumber(data.revenue_estimate)}</td>
             </tr>
+            {#if data.has_reported !== false}
             <tr>
               <td class="py-1.5 text-sm">Actual</td>
-              <td class="py-1.5 text-sm text-right font-semibold font-mono">{formatLargeNumber(data.revenue_actual)}</td>
+              <td class="py-1.5 text-sm text-right font-semibold font-mono">{data.revenue_actual != null ? formatLargeNumber(data.revenue_actual) : 'N/A'}</td>
             </tr>
             <tr>
               <td class="py-1.5 text-sm">Surprise</td>
               <td class="py-1.5 text-sm text-right font-semibold font-mono {data.revenue_surprise_pct > 0 ? 'text-green-500' : data.revenue_surprise_pct < 0 ? 'text-red-500' : ''}">
-                {formatPercent(data.revenue_surprise_pct)}
+                {data.revenue_surprise_pct != null ? formatPercent(data.revenue_surprise_pct) : 'N/A'}
               </td>
             </tr>
+            {/if}
           </tbody>
         </table>
       </div>
     </div>
 
+    {#if data.has_reported === false}
+      <div class="mb-5 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+        <p class="text-sm text-yellow-400">⏳ This company has not reported earnings yet. Estimates and sentiment are based on pre-report market expectations.</p>
+      </div>
+    {/if}
+
     <div class="mb-5">
       <h3 class="text-sm text-slate-400 mb-2 uppercase tracking-wide">📋 Guidance Summary</h3>
-      <p class="text-sm leading-relaxed text-slate-100">{data.guidance_summary || 'No guidance data available.'}</p>
+      <p class="text-sm leading-relaxed text-slate-100">{data.guidance_summary || (data.has_reported === false ? 'Earnings not yet reported.' : 'No guidance data available.')}</p>
     </div>
 
     <div class="mb-5">
@@ -100,9 +110,13 @@
 
     <div class="mb-5">
       <h3 class="text-sm text-slate-400 mb-2 uppercase tracking-wide">📈 Price Reaction</h3>
-      <span class="text-2xl font-bold font-mono {data.price_reaction_pct > 0 ? 'text-green-500' : data.price_reaction_pct < 0 ? 'text-red-500' : ''}">
-        {formatPercent(data.price_reaction_pct)}
-      </span>
+      {#if data.price_reaction_pct != null}
+        <span class="text-2xl font-bold font-mono {data.price_reaction_pct > 0 ? 'text-green-500' : data.price_reaction_pct < 0 ? 'text-red-500' : ''}">
+          {formatPercent(data.price_reaction_pct)}
+        </span>
+      {:else}
+        <span class="text-sm text-slate-400">Pending earnings report</span>
+      {/if}
     </div>
 
     {#if data.raw_analysis}

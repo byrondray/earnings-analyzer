@@ -12,20 +12,29 @@ from app.services.cache import (
 
 FMP_PROFILE_URL = "https://financialmodelingprep.com/stable/profile"
 
-# Concurrency limit to avoid hammering the API
-_CONCURRENT_LIMIT = 5
+_CONCURRENT_LIMIT = 10
 
 
-async def _fetch_market_cap_from_api(ticker: str) -> float | None:
+async def _fetch_market_cap_from_api(
+    ticker: str, client: httpx.AsyncClient | None = None
+) -> float | None:
     settings = get_settings()
     params = {"symbol": ticker, "apikey": settings.FMP_API_KEY}
-    async with httpx.AsyncClient(timeout=5.0) as client:
+    should_close = client is None
+    if client is None:
+        client = httpx.AsyncClient(timeout=5.0)
+    try:
         resp = await client.get(FMP_PROFILE_URL, params=params)
         if resp.status_code != 200:
             return None
         data = resp.json()
         if isinstance(data, list) and len(data) > 0:
             return data[0].get("marketCap")
+    except Exception:
+        return None
+    finally:
+        if should_close:
+            await client.aclose()
     return None
 
 
@@ -52,15 +61,23 @@ async def fetch_market_caps_batch(tickers: list[str]) -> dict[str, float | None]
     if missing:
         semaphore = asyncio.Semaphore(_CONCURRENT_LIMIT)
 
-        async def _limited_fetch(t: str) -> tuple[str, float | None]:
-            async with semaphore:
-                val = await _fetch_market_cap_from_api(t)
-                return (t, val)
+        async with httpx.AsyncClient(timeout=5.0) as client:
 
-        results = await asyncio.gather(*[_limited_fetch(t) for t in missing])
+            async def _limited_fetch(t: str) -> tuple[str, float | None]:
+                async with semaphore:
+                    val = await _fetch_market_cap_from_api(t, client)
+                    return (t, val)
+
+            results = await asyncio.gather(
+                *[_limited_fetch(t) for t in missing],
+                return_exceptions=True,
+            )
 
         to_cache = {}
-        for ticker, cap in results:
+        for item in results:
+            if isinstance(item, Exception):
+                continue
+            ticker, cap = item
             if cap is not None:
                 cached[ticker] = cap
                 to_cache[ticker] = cap

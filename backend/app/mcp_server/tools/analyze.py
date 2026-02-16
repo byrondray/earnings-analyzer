@@ -10,59 +10,58 @@ ANALYSIS_TOOL = {
     "input_schema": {
         "type": "object",
         "properties": {
+            "has_reported": {
+                "type": "boolean",
+                "description": "Whether the company has already reported earnings. False if the report date is in the future.",
+            },
             "eps_estimate": {
-                "type": "number",
+                "type": ["number", "null"],
                 "description": "Consensus EPS estimate before the report",
             },
             "eps_actual": {
-                "type": "number",
-                "description": "Actual reported EPS",
+                "type": ["number", "null"],
+                "description": "Actual reported EPS. Must be null if has_reported is false.",
             },
             "eps_surprise_pct": {
-                "type": "number",
-                "description": "EPS surprise as a percentage ((actual - estimate) / |estimate| * 100)",
+                "type": ["number", "null"],
+                "description": "EPS surprise as a percentage ((actual - estimate) / |estimate| * 100). Must be null if has_reported is false.",
             },
             "revenue_estimate": {
-                "type": "number",
+                "type": ["number", "null"],
                 "description": "Consensus revenue estimate in dollars",
             },
             "revenue_actual": {
-                "type": "number",
-                "description": "Actual reported revenue in dollars",
+                "type": ["number", "null"],
+                "description": "Actual reported revenue in dollars. Must be null if has_reported is false.",
             },
             "revenue_surprise_pct": {
-                "type": "number",
-                "description": "Revenue surprise as a percentage",
+                "type": ["number", "null"],
+                "description": "Revenue surprise as a percentage. Must be null if has_reported is false.",
             },
             "guidance_summary": {
-                "type": "string",
-                "description": "1-3 sentence summary of forward guidance provided by management",
+                "type": ["string", "null"],
+                "description": "1-3 sentence summary of forward guidance provided by management. Null if not yet reported.",
             },
             "sentiment": {
                 "type": "string",
                 "enum": ["bullish", "bearish", "neutral"],
-                "description": "Overall sentiment of the earnings report",
+                "description": "Overall sentiment — pre-report expectations if not yet reported, post-report analysis if reported",
             },
             "sentiment_score": {
                 "type": "number",
                 "description": "Sentiment confidence score from 0.0 to 1.0",
             },
             "price_reaction_pct": {
-                "type": "number",
-                "description": "Stock price change percentage in after-hours or next trading day",
+                "type": ["number", "null"],
+                "description": "Stock price change percentage in after-hours or next trading day. Must be null if has_reported is false.",
             },
         },
         "required": [
+            "has_reported",
             "eps_estimate",
-            "eps_actual",
-            "eps_surprise_pct",
             "revenue_estimate",
-            "revenue_actual",
-            "revenue_surprise_pct",
-            "guidance_summary",
             "sentiment",
             "sentiment_score",
-            "price_reaction_pct",
         ],
     },
 }
@@ -71,16 +70,24 @@ SYSTEM_PROMPT = """You are a financial analyst specializing in earnings report a
 Given search results about a company's earnings report, extract the key financial metrics
 and provide your analysis. Use the earnings_analysis_result tool to return your structured analysis.
 
-Rules:
-- Extract actual numbers from the search results when available
-- If a specific number isn't available, make your best estimate based on context
+CRITICAL RULES:
+- Today's date is important. If the earnings report has NOT been released yet (report date
+  is today or in the future and no actual results are found in the search data), set
+  has_reported=false and return null for: eps_actual, eps_surprise_pct, revenue_actual,
+  revenue_surprise_pct, guidance_summary, and price_reaction_pct.
+- NEVER fabricate or estimate actual earnings numbers. Only use numbers explicitly stated
+  in the search results.
+- You may still provide eps_estimate, revenue_estimate, sentiment (based on market
+  expectations), and sentiment_score for upcoming reports.
+
+Formatting rules:
 - Revenue values should be in raw dollars (e.g., 94.9 billion = 94900000000)
 - EPS values should be in dollars per share
 - Surprise percentages: ((actual - estimate) / |estimate|) * 100
 - Guidance summary should be concise (1-3 sentences)
 - Sentiment should reflect the overall tone: bullish, bearish, or neutral
 - Sentiment score: 0.0 = no confidence, 1.0 = very confident
-- Price reaction: estimated or actual after-hours/next-day price change percentage"""
+- Price reaction: actual after-hours/next-day price change percentage"""
 
 
 async def analyze_earnings(ticker: str, earnings_data: str) -> dict:

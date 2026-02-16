@@ -17,6 +17,7 @@ def _make_mock_httpx_client(json_data, status_code=200):
     mock_client.get = AsyncMock(return_value=mock_response)
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client.aclose = AsyncMock()
     return mock_client
 
 
@@ -91,15 +92,18 @@ class TestFetchMarketCapsBatch:
     @pytest.mark.asyncio
     @patch("app.services.market_cap.set_many_cached_market_caps")
     @patch("app.services.market_cap._fetch_market_cap_from_api")
+    @patch("app.services.market_cap.httpx.AsyncClient")
     @patch("app.services.market_cap.get_many_cached_market_caps")
-    async def test_partial_cache_miss(self, mock_get_many, mock_api_fetch, mock_set_many):
+    async def test_partial_cache_miss(self, mock_get_many, mock_client_cls, mock_api_fetch, mock_set_many):
         mock_get_many.return_value = {"AAPL": 3.7e12, "MSFT": None}
         mock_api_fetch.return_value = 2.5e12
+        mock_client = _make_mock_httpx_client([])
+        mock_client_cls.return_value = mock_client
 
         result = await fetch_market_caps_batch(["AAPL", "MSFT"])
         assert result["AAPL"] == 3.7e12
         assert result["MSFT"] == 2.5e12
-        mock_api_fetch.assert_called_once_with("MSFT")
+        mock_api_fetch.assert_called_once()
         mock_set_many.assert_called_once_with({"MSFT": 2.5e12})
 
     @pytest.mark.asyncio
@@ -110,9 +114,13 @@ class TestFetchMarketCapsBatch:
     @pytest.mark.asyncio
     @patch("app.services.market_cap.set_many_cached_market_caps")
     @patch("app.services.market_cap._fetch_market_cap_from_api")
+    @patch("app.services.market_cap.httpx.AsyncClient")
     @patch("app.services.market_cap.get_many_cached_market_caps")
-    async def test_deduplicates_tickers(self, mock_get_many, mock_api_fetch, mock_set_many):
+    async def test_deduplicates_tickers(self, mock_get_many, mock_client_cls, mock_api_fetch, mock_set_many):
         mock_get_many.return_value = {"AAPL": None}
+        mock_api_fetch.return_value = 3.7e12
+        mock_client = _make_mock_httpx_client([])
+        mock_client_cls.return_value = mock_client
         mock_api_fetch.return_value = 3.7e12
 
         result = await fetch_market_caps_batch(["AAPL", "AAPL", "AAPL"])

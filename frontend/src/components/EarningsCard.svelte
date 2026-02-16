@@ -37,8 +37,8 @@
     }
   }
 
-  let hasBeat = $derived(analysisResult && analysisResult.eps_surprise_pct > 0);
-  let hasMiss = $derived(analysisResult && analysisResult.eps_surprise_pct < 0);
+  let hasBeat = $derived(analysisResult && analysisResult.has_reported !== false && analysisResult.eps_surprise_pct > 0);
+  let hasMiss = $derived(analysisResult && analysisResult.has_reported !== false && analysisResult.eps_surprise_pct < 0);
 </script>
 
 <button class="w-full bg-slate-900 border border-slate-700 rounded-md p-2.5 cursor-pointer transition-all text-left text-slate-100 font-[inherit] hover:not-disabled:bg-slate-700 hover:not-disabled:border-blue-500 disabled:opacity-70 disabled:cursor-wait" onclick={handleClick} disabled={analyzing}>

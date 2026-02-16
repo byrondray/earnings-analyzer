@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from datetime import date, timedelta
 import csv
 import io
@@ -124,8 +125,10 @@ async def upsert_earnings_events(
     return list(result.scalars().all())
 
 
-_ENRICH_TIMEOUT = 15
-_MAX_ENRICH_TICKERS = 40
+logger = logging.getLogger(__name__)
+
+_ENRICH_TIMEOUT = 12
+_MAX_ENRICH_TICKERS = 20
 
 
 async def _enrich_market_caps(
@@ -139,9 +142,11 @@ async def _enrich_market_caps(
     if not tickers:
         return events
 
+    logger.info("Enriching market caps for %d tickers", len(tickers))
     caps = await asyncio.wait_for(
         fetch_market_caps_batch(tickers), timeout=_ENRICH_TIMEOUT
     )
+    logger.info("Market cap enrichment done, got %d values", sum(1 for v in caps.values() if v is not None))
 
     for event in events:
         cap = caps.get(event.ticker)

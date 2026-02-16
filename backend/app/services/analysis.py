@@ -45,6 +45,7 @@ async def run_analysis(
 
     analysis["ticker"] = ticker.upper()
     analysis["quarter"] = quarter
+    analysis.setdefault("has_reported", True)
     return analysis
 
 

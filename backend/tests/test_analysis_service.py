@@ -82,16 +82,11 @@ class TestAnalysisToolSchema:
         schema = ANALYSIS_TOOL["input_schema"]
         required = schema["required"]
         expected = [
+            "has_reported",
             "eps_estimate",
-            "eps_actual",
-            "eps_surprise_pct",
             "revenue_estimate",
-            "revenue_actual",
-            "revenue_surprise_pct",
-            "guidance_summary",
             "sentiment",
             "sentiment_score",
-            "price_reaction_pct",
         ]
         assert set(required) == set(expected)
 
