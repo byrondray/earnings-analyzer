@@ -7,6 +7,8 @@
   let preMarket = $derived(events.filter(e => e.report_time === 'pre_market'));
   let postMarket = $derived(events.filter(e => e.report_time === 'post_market'));
   let unknown = $derived(events.filter(e => e.report_time === 'unknown'));
+  let isPast = $derived(dateStr < new Date().toISOString().split('T')[0]);
+  let allUnknownTime = $derived(preMarket.length === 0 && postMarket.length === 0);
 </script>
 
 <div class="glass-card-solid rounded-2xl min-h-50 flex flex-col {isToday(dateStr) ? 'glow-green-subtle border-accent-green!' : ''}">
@@ -38,7 +40,9 @@
 
     {#if unknown.length > 0}
       <div class="flex flex-col gap-1.5">
-        <span class="text-xs text-text-muted font-semibold uppercase tracking-wide py-1">⏰ TBD</span>
+        {#if !allUnknownTime}
+          <span class="text-xs text-text-muted font-semibold uppercase tracking-wide py-1">{isPast ? '📋 Reported' : '⏰ TBD'}</span>
+        {/if}
         {#each unknown as event}
           <EarningsCard {event} {onShowAnalysis} />
         {/each}

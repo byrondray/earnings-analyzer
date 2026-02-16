@@ -90,9 +90,31 @@ Formatting rules:
 - Price reaction: actual after-hours/next-day price change percentage"""
 
 
-async def analyze_earnings(ticker: str, earnings_data: str) -> dict:
+def _build_event_context(ticker: str, event_context: dict | None) -> str:
+    if not event_context:
+        return ""
+    parts = [f"\nKnown data for {ticker} from our database:"]
+    if event_context.get("company_name"):
+        parts.append(f"- Company: {event_context['company_name']}")
+    if event_context.get("report_date"):
+        parts.append(f"- Report date: {event_context['report_date']}")
+    if event_context.get("eps_estimate") is not None:
+        parts.append(f"- EPS estimate: ${event_context['eps_estimate']}")
+    if event_context.get("revenue_estimate") is not None:
+        parts.append(f"- Revenue estimate: ${event_context['revenue_estimate']:,.0f}")
+    if event_context.get("fiscal_quarter"):
+        parts.append(f"- Fiscal quarter ending: {event_context['fiscal_quarter']}")
+    return "\n".join(parts)
+
+
+async def analyze_earnings(ticker: str, earnings_data: str, event_context: dict | None = None) -> dict:
     settings = get_settings()
     client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+    context_str = _build_event_context(ticker, event_context)
+    company_hint = ""
+    if event_context and event_context.get("company_name"):
+        company_hint = f" ({event_context['company_name']})"
 
     response = await client.messages.create(
         model="claude-sonnet-4-20250514",
@@ -103,7 +125,7 @@ async def analyze_earnings(ticker: str, earnings_data: str) -> dict:
         messages=[
             {
                 "role": "user",
-                "content": f"Analyze the following earnings report data for {ticker}:\n\n{earnings_data}",
+                "content": f"Analyze the following earnings report data for {ticker}{company_hint}:\n{context_str}\n\n{earnings_data}",
             }
         ],
     )

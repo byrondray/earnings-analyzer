@@ -16,6 +16,12 @@
 
   function computeQuarter(fiscalQuarter) {
     if (!fiscalQuarter) return 'Q4-2025';
+    const monthMap = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+    const slashMatch = fiscalQuarter.match(/^([A-Za-z]+)\/([0-9]{4})$/);
+    if (slashMatch) {
+      const mon = monthMap[slashMatch[1].toLowerCase().slice(0, 3)];
+      if (mon) return `Q${Math.ceil(mon / 3)}-${slashMatch[2]}`;
+    }
     const d = new Date(fiscalQuarter + 'T00:00:00');
     if (isNaN(d.getTime())) return fiscalQuarter;
     return `Q${Math.ceil((d.getMonth() + 1) / 3)}-${d.getFullYear()}`;

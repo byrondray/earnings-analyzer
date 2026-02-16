@@ -49,9 +49,10 @@ async def _fetch_page(client: httpx.AsyncClient, url: str) -> str:
         return ""
 
 
-async def search_earnings_report(ticker: str, quarter: str) -> str:
+async def search_earnings_report(ticker: str, quarter: str, company_name: str | None = None) -> str:
     settings = get_settings()
-    query = f"{ticker} {quarter} earnings report results revenue EPS guidance outlook"
+    name_part = f'"{company_name}"' if company_name and company_name != ticker else ticker
+    query = f"{name_part} {ticker} {quarter} earnings report results revenue EPS guidance outlook"
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.get(

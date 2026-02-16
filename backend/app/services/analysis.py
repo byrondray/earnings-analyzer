@@ -21,21 +21,33 @@ async def run_analysis_streaming(
         yield ("result", cached)
         return
 
+    event_query = select(EarningsEvent).where(EarningsEvent.ticker == ticker.upper())
+    event_result = await db.execute(event_query)
+    event = event_result.scalar_one_or_none()
+
+    event_context = None
+    company_name = None
+    if event:
+        company_name = event.company_name
+        event_context = {
+            "company_name": event.company_name,
+            "report_date": event.report_date.isoformat() if event.report_date else None,
+            "eps_estimate": float(event.eps_estimate) if event.eps_estimate is not None else None,
+            "revenue_estimate": float(event.revenue_estimate) if event.revenue_estimate is not None else None,
+            "fiscal_quarter": event.fiscal_quarter,
+        }
+
     yield ("status", {"step": "search", "message": "Searching for earnings data..."})
-    search_results = await search_earnings_report(ticker, quarter)
+    search_results = await search_earnings_report(ticker, quarter, company_name=company_name)
 
     yield ("status", {"step": "analyze", "message": "Reading articles & analyzing with AI..."})
-    analysis = await analyze_earnings(ticker, search_results)
+    analysis = await analyze_earnings(ticker, search_results, event_context=event_context)
 
     if "error" in analysis:
         yield ("error", analysis)
         return
 
     yield ("status", {"step": "save", "message": "Saving results..."})
-
-    event_query = select(EarningsEvent).where(EarningsEvent.ticker == ticker.upper())
-    event_result = await db.execute(event_query)
-    event = event_result.scalar_one_or_none()
 
     if event:
         earnings_analysis = EarningsAnalysis(
