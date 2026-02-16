@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, timedelta
 import csv
 import io
@@ -123,13 +124,24 @@ async def upsert_earnings_events(
     return list(result.scalars().all())
 
 
+_ENRICH_TIMEOUT = 15
+_MAX_ENRICH_TICKERS = 40
+
+
 async def _enrich_market_caps(
     db: AsyncSession, events: list[EarningsEvent]
 ) -> list[EarningsEvent]:
     from app.services.market_cap import fetch_market_caps_batch
 
-    tickers = [e.ticker for e in events]
-    caps = await fetch_market_caps_batch(tickers)
+    needs_cap = [e for e in events if e.market_cap is None]
+    tickers = list(dict.fromkeys(e.ticker for e in needs_cap))[:_MAX_ENRICH_TICKERS]
+
+    if not tickers:
+        return events
+
+    caps = await asyncio.wait_for(
+        fetch_market_caps_batch(tickers), timeout=_ENRICH_TIMEOUT
+    )
 
     for event in events:
         cap = caps.get(event.ticker)

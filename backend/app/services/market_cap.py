@@ -19,7 +19,7 @@ _CONCURRENT_LIMIT = 5
 async def _fetch_market_cap_from_api(ticker: str) -> float | None:
     settings = get_settings()
     params = {"symbol": ticker, "apikey": settings.FMP_API_KEY}
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=5.0) as client:
         resp = await client.get(FMP_PROFILE_URL, params=params)
         if resp.status_code != 200:
             return None
