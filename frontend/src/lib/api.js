@@ -1,4 +1,17 @@
+import { getToken } from './clerk.js';
+
 const API_BASE = '/api';
+
+async function authFetch(url, options = {}) {
+  const token = await getToken();
+  if (token) {
+    options.headers = {
+      ...options.headers,
+      Authorization: `Bearer ${token}`,
+    };
+  }
+  return fetch(url, options);
+}
 
 export async function fetchWeekEarnings(dateStr = null) {
   const params = dateStr ? `?date=${dateStr}` : '';
@@ -85,4 +98,49 @@ export async function fetchHighlights() {
   const res = await fetch(`${API_BASE}/calendar/highlights`);
   if (!res.ok) throw new Error(`Failed to fetch highlights: ${res.status}`);
   return res.json();
+}
+
+export async function fetchFavorites() {
+  const res = await authFetch(`${API_BASE}/favorites/`);
+  if (res.status === 401) return [];
+  if (!res.ok) throw new Error(`Failed to fetch favorites: ${res.status}`);
+  return res.json();
+}
+
+export async function addFavorite(ticker, companyName = null) {
+  const params = new URLSearchParams();
+  if (companyName) params.set('company_name', companyName);
+  const qs = params.toString() ? `?${params.toString()}` : '';
+  const res = await authFetch(
+    `${API_BASE}/favorites/${encodeURIComponent(ticker)}${qs}`,
+    {
+      method: 'POST',
+    },
+  );
+  if (res.status === 409) return null;
+  if (!res.ok) throw new Error(`Failed to add favorite: ${res.status}`);
+  return res.json();
+}
+
+export async function removeFavorite(ticker) {
+  const res = await authFetch(
+    `${API_BASE}/favorites/${encodeURIComponent(ticker)}`,
+    {
+      method: 'DELETE',
+    },
+  );
+  if (!res.ok && res.status !== 404)
+    throw new Error(`Failed to remove favorite: ${res.status}`);
+}
+
+export async function checkFavorites(tickers) {
+  if (!tickers || tickers.length === 0) return {};
+  const params = tickers
+    .map((t) => `tickers=${encodeURIComponent(t)}`)
+    .join('&');
+  const res = await authFetch(`${API_BASE}/favorites/check?${params}`);
+  if (res.status === 401) return {};
+  if (!res.ok) throw new Error(`Failed to check favorites: ${res.status}`);
+  const data = await res.json();
+  return data.favorites;
 }

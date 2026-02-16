@@ -4,17 +4,57 @@
   import StockSearch from './components/StockSearch.svelte';
   import Homepage from './components/Homepage.svelte';
   import Toast from './components/Toast.svelte';
+  import { initClerk, signIn, signOut } from './lib/clerk.js';
+  import { fetchFavorites } from './lib/api.js';
 
   let analysisData = $state(null);
   let showModal = $state(false);
   let errorMessage = $state(null);
-
   let currentView = $state(getInitialView());
+
+  let user = $state(null);
+  let authReady = $state(false);
+  let favorites = $state(new Set());
 
   function getInitialView() {
     const params = new URLSearchParams(window.location.search);
     if (params.has('week')) return 'calendar';
     return 'home';
+  }
+
+  $effect(() => {
+    initClerk().then((clerk) => {
+      authReady = true;
+      if (!clerk) return;
+
+      user = clerk.user ?? null;
+      if (user) loadFavorites();
+
+      clerk.addListener(({ user: u }) => {
+        user = u ?? null;
+        if (user) loadFavorites();
+        else favorites = new Set();
+      });
+    });
+  });
+
+  async function loadFavorites() {
+    try {
+      const favs = await fetchFavorites();
+      favorites = new Set(favs.map(f => f.ticker));
+    } catch {
+      favorites = new Set();
+    }
+  }
+
+  function handleFavoriteChange(ticker, added) {
+    if (added) {
+      favorites = new Set([...favorites, ticker]);
+    } else {
+      const next = new Set(favorites);
+      next.delete(ticker);
+      favorites = next;
+    }
   }
 
   function handleShowAnalysis(event) {
