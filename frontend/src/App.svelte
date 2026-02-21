@@ -131,8 +131,9 @@
   <LandingPage />
 {:else}
   <main class="max-w-350 mx-auto p-6 min-h-screen text-text-primary font-sans radial-gradient-bg">
-    <header class="text-center mb-10 relative">
-      <div class="absolute top-0 right-0">
+    <header class="mb-10">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex-1"></div>
         <div class="flex items-center gap-3">
           <span class="text-sm text-text-muted">{user.firstName ?? user.primaryEmailAddress?.emailAddress}</span>
           <button
@@ -141,12 +142,14 @@
           >Sign out</button>
         </div>
       </div>
-      <button class="bg-transparent border-none cursor-pointer" onclick={navigateToHome}>
-        <h1 class="text-4xl font-extrabold mb-2 tracking-tight">
-          <span class="text-accent-green">Earnings</span> Analyzer
-        </h1>
-      </button>
-      <p class="text-text-muted text-sm tracking-wide">Track and analyze upcoming earnings reports</p>
+      <div class="text-center">
+        <button class="bg-transparent border-none cursor-pointer" onclick={navigateToHome}>
+          <h1 class="text-4xl font-extrabold mb-2 tracking-tight">
+            <span class="text-accent-green">Earnings</span> Analyzer
+          </h1>
+        </button>
+        <p class="text-text-muted text-sm tracking-wide">Track and analyze upcoming earnings reports</p>
+      </div>
     </header>
 
     <StockSearch onShowAnalysis={handleShowAnalysis} onError={handleError} {user} {favorites} onFavoriteChange={handleFavoriteChange} />
