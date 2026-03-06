@@ -95,6 +95,6 @@ async def _fetch_yahoo_chart(ticker: str, yrange: str, interval: str) -> dict:
                 "shortName": meta.get("shortName", ticker),
             },
         }
-    except Exception:
+    except (httpx.HTTPError, KeyError, ValueError):
         logger.exception("Yahoo chart fetch failed for %s", ticker)
         return {"ticker": ticker, "points": [], "meta": {}}

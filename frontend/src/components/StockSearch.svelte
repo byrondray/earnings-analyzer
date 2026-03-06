@@ -1,6 +1,6 @@
 <script>
   import { searchStock } from '../lib/api.js';
-  import { formatLargeNumber } from '../lib/utils.js';
+  import { formatLargeNumber, formatDateReadable } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
 
   let { onShowAnalysis, onError, user = null, favorites = new Set(), onFavoriteChange } = $props();
@@ -30,16 +30,6 @@
   function clearSearch() {
     query = '';
     results = null;
-  }
-
-  function formatDateReadable(dateStr) {
-    const d = new Date(dateStr + 'T00:00:00');
-    return d.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
   }
 
   function formatTime(time) {

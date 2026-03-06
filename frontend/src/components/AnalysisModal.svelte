@@ -1,5 +1,5 @@
 <script>
-  import { formatLargeNumber, formatPercent } from '../lib/utils.js';
+  import { formatLargeNumber, formatPercent, getSentimentColor, getSentimentEmoji } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
 
   let { data, onClose, user = null, isFavorited = false, onFavoriteChange } = $props();
@@ -10,18 +10,6 @@
   });
 
   let allNA = $derived(data.eps_estimate == null && data.eps_actual == null && data.revenue_estimate == null && data.revenue_actual == null);
-
-  function getSentimentColor(sentiment) {
-    if (sentiment === 'bullish') return '#34AC56';
-    if (sentiment === 'bearish') return '#ef4444';
-    return '#f59e0b';
-  }
-
-  function getSentimentEmoji(sentiment) {
-    if (sentiment === 'bullish') return '🟢';
-    if (sentiment === 'bearish') return '🔴';
-    return '🟡';
-  }
 </script>
 
 <div class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-1000 p-4" onclick={onClose} onkeydown={(e) => e.key === 'Escape' && onClose()} role="dialog" aria-modal="true" tabindex="-1">

@@ -44,14 +44,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+def _get_cors_origins() -> list[str]:
+    extra = os.environ.get("CORS_ORIGINS", "")
+    origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    if extra:
+        origins.extend(o.strip() for o in extra.split(",") if o.strip())
+    return origins
+
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_get_cors_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -72,7 +77,9 @@ if STATIC_DIR.is_dir():
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
-        file_path = STATIC_DIR / full_path
+        file_path = (STATIC_DIR / full_path).resolve()
+        if not file_path.is_relative_to(STATIC_DIR.resolve()):
+            return FileResponse(STATIC_DIR / "index.html")
         if file_path.is_file():
             return FileResponse(file_path)
         return FileResponse(STATIC_DIR / "index.html")

@@ -1,6 +1,6 @@
 <script>
   import { getAnalysis, triggerAnalysis, fetchStockNews, fetchChartData, searchStock } from '../lib/api.js';
-  import { formatLargeNumber, formatPercent } from '../lib/utils.js';
+  import { formatLargeNumber, formatPercent, getSentimentColor, getSentimentEmoji, formatNewsDate } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
 
   let { ticker, companyName = '', onBack, user = null, isFavorited = false, onFavoriteChange } = $props();
@@ -33,7 +33,6 @@
   async function loadAll() {
     loadAnalysis();
     loadNews();
-    loadChart(chartRange);
     loadEarningsEvent();
   }
 
@@ -46,15 +45,16 @@
       if (cached) {
         analysis = cached;
         if (cached.has_reported === false && cached.stale) {
-          loadingAnalysis = false;
           analysisStatus = 'Refreshing analysis...';
           triggerAnalysis(ticker, guessQuarter(), (msg) => {
             analysisStatus = msg;
           }).then((result) => {
             analysis = result;
             analysisStatus = '';
+            loadingAnalysis = false;
           }).catch(() => {
             analysisStatus = '';
+            loadingAnalysis = false;
           });
           return;
         }
@@ -117,18 +117,6 @@
     const now = new Date();
     const q = Math.ceil((now.getMonth() + 1) / 3);
     return `Q${q}-${now.getFullYear()}`;
-  }
-
-  function getSentimentColor(sentiment) {
-    if (sentiment === 'bullish') return '#34AC56';
-    if (sentiment === 'bearish') return '#ef4444';
-    return '#f59e0b';
-  }
-
-  function getSentimentEmoji(sentiment) {
-    if (sentiment === 'bullish') return '🟢';
-    if (sentiment === 'bearish') return '🔴';
-    return '🟡';
   }
 
   let allNA = $derived(analysis && analysis.eps_estimate == null && analysis.eps_actual == null && analysis.revenue_estimate == null && analysis.revenue_actual == null);
@@ -220,7 +208,11 @@
     return { x, y, price: point.c, time: timeStr, xPct: (x / w) * 100, yPct: (y / h) * 100 };
   });
 
+  let _lastHoverTime = 0;
   function handleChartMouseMove(e) {
+    const now = performance.now();
+    if (now - _lastHoverTime < 16) return;
+    _lastHoverTime = now;
     if (!chartContainer || !chartData?.points?.length) return;
     const rect = chartContainer.getBoundingClientRect();
     const xPct = (e.clientX - rect.left) / rect.width;
@@ -230,20 +222,6 @@
 
   function handleChartMouseLeave() {
     hoverIndex = -1;
-  }
-
-  function formatNewsDate(dateStr) {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const now = new Date();
-    const diff = now - d;
-    const hours = Math.floor(diff / 3600000);
-    if (hours < 1) return 'Just now';
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 </script>
 
@@ -496,6 +474,7 @@
                     src={article.imageUrl}
                     alt=""
                     class="w-16 h-16 rounded-lg object-cover shrink-0 bg-surface-primary"
+                    loading="lazy"
                     onerror={(e) => e.target.style.display = 'none'}
                   />
                 {/if}

@@ -35,11 +35,15 @@ export async function fetchPrevWeek(dateStr = null) {
 }
 
 export async function triggerAnalysis(ticker, quarter, onStatus) {
+  const token = await getToken();
+  const headers = { Accept: 'text/event-stream' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
   const res = await fetch(
     `${API_BASE}/analysis/${ticker}?quarter=${encodeURIComponent(quarter)}`,
     {
       method: 'POST',
-      headers: { Accept: 'text/event-stream' },
+      headers,
     },
   );
   if (!res.ok) throw new Error(`Analysis failed: ${res.status}`);
@@ -49,30 +53,43 @@ export async function triggerAnalysis(ticker, quarter, onStatus) {
   let buffer = '';
   let result = null;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop();
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
 
-    let eventType = null;
-    for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        eventType = line.slice(7).trim();
-      } else if (line.startsWith('data: ') && eventType) {
-        const data = JSON.parse(line.slice(6));
-        if (eventType === 'status' && onStatus) {
-          onStatus(data.message);
-        } else if (eventType === 'result') {
-          result = data;
-        } else if (eventType === 'error') {
-          throw new Error(data.error || 'Analysis failed');
+      let eventType = null;
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith('data: ') && eventType) {
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (eventType === 'status' && onStatus) {
+              onStatus(data.message);
+            } else if (eventType === 'result') {
+              result = data;
+            } else if (eventType === 'error') {
+              throw new Error(data.error || 'Analysis failed');
+            }
+          } catch (parseErr) {
+            if (
+              parseErr.message === 'Analysis failed' ||
+              parseErr.message?.startsWith('Analysis failed')
+            )
+              throw parseErr;
+          }
+          eventType = null;
         }
-        eventType = null;
       }
     }
+  } catch (streamErr) {
+    if (result) return result;
+    throw streamErr;
   }
 
   if (!result) throw new Error('No analysis result received');

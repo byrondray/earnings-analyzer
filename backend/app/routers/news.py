@@ -90,7 +90,7 @@ async def _fetch_newsapi(ticker: str, days: int, api_key: str) -> list[dict]:
             for a in data.get("articles", [])
             if a.get("title") and "[Removed]" not in a.get("title", "")
         ]
-    except Exception:
+    except (httpx.HTTPError, KeyError, ValueError):
         logger.exception("NewsAPI fetch failed for %s", ticker)
         return []
 

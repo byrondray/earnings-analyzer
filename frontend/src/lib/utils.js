@@ -70,3 +70,43 @@ export function formatPercent(num) {
   const sign = num >= 0 ? '+' : '';
   return `${sign}${num.toFixed(2)}%`;
 }
+
+export function getSentimentColor(sentiment) {
+  if (sentiment === 'bullish') return '#34AC56';
+  if (sentiment === 'bearish') return '#ef4444';
+  return '#f59e0b';
+}
+
+export function getSentimentEmoji(sentiment) {
+  if (sentiment === 'bullish') return '🟢';
+  if (sentiment === 'bearish') return '🔴';
+  return '🟡';
+}
+
+export function formatDateReadable(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+export function formatNewsDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const now = new Date();
+  const diff = now - d;
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return 'Just now';
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
