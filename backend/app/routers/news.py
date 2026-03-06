@@ -122,6 +122,6 @@ async def _fetch_brave_news(ticker: str, api_key: str) -> list[dict]:
             }
             for r in results
         ]
-    except Exception:
+    except (httpx.HTTPError, KeyError, ValueError):
         logger.exception("Brave News fetch failed for %s", ticker)
         return []

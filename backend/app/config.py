@@ -1,8 +1,14 @@
+import logging
 import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 from functools import lru_cache
+
+logger = logging.getLogger(__name__)
+
+_REQUIRED_KEYS = ["DATABASE_URL", "ANTHROPIC_API_KEY", "BRAVE_SEARCH_API_KEY"]
 
 
 def _find_env_file() -> str | None:
@@ -30,6 +36,13 @@ class Settings(BaseSettings):
         "env_file_encoding": "utf-8",
         "extra": "ignore",
     }
+
+    @model_validator(mode="after")
+    def _warn_missing_keys(self):
+        missing = [k for k in _REQUIRED_KEYS if not getattr(self, k)]
+        if missing:
+            logger.warning("Missing required env vars: %s", ", ".join(missing))
+        return self
 
 
 @lru_cache
