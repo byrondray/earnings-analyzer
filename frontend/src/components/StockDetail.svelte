@@ -45,6 +45,19 @@
       let cached = await getAnalysis(ticker);
       if (cached) {
         analysis = cached;
+        if (cached.has_reported === false && cached.stale) {
+          loadingAnalysis = false;
+          analysisStatus = 'Refreshing analysis...';
+          triggerAnalysis(ticker, guessQuarter(), (msg) => {
+            analysisStatus = msg;
+          }).then((result) => {
+            analysis = result;
+            analysisStatus = '';
+          }).catch(() => {
+            analysisStatus = '';
+          });
+          return;
+        }
         loadingAnalysis = false;
         analysisStatus = '';
         return;

@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 from sqlalchemy import select
@@ -110,11 +110,18 @@ async def get_cached_analysis(
     if analysis.raw_analysis and isinstance(analysis.raw_analysis, dict):
         has_reported = analysis.raw_analysis.get("has_reported", True)
 
+    stale = False
+    if not has_reported and analysis.analyzed_at:
+        from app.services.cache import ANALYSIS_UNREPORTED_TTL
+        age = datetime.utcnow() - analysis.analyzed_at
+        stale = age >= timedelta(seconds=ANALYSIS_UNREPORTED_TTL)
+
     return {
         "id": analysis.id,
         "earnings_event_id": analysis.earnings_event_id,
         "ticker": ticker.upper(),
         "has_reported": has_reported,
+        "stale": stale,
         "eps_estimate": analysis.eps_estimate,
         "eps_actual": analysis.eps_actual,
         "eps_surprise_pct": analysis.eps_surprise_pct,
