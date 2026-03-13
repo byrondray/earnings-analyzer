@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timedelta
 from html import escape
 from urllib.parse import quote
@@ -63,10 +64,161 @@ def _report_time_label(value: ReportTime | str | None):
     return "Time not specified"
 
 
-def _build_page(*, title: str, description: str, canonical_url: str, body: str, og_type: str = "website"):
+def _iso_datetime(value: date | None, report_time: ReportTime | str | None = None):
+  if value is None:
+    return None
+  hour = 21
+  if report_time == ReportTime.PRE_MARKET or report_time == "pre_market":
+    hour = 13
+  elif report_time == ReportTime.POST_MARKET or report_time == "post_market":
+    hour = 21
+  return datetime.combine(value, datetime.min.time()).replace(hour=hour).isoformat()
+
+
+def _json_ld_scripts(items: list[dict] | None):
+  if not items:
+    return ""
+  return "\n".join(
+    f'<script type="application/ld+json">{escape(json.dumps(item, ensure_ascii=False), quote=False)}</script>'
+    for item in items
+  )
+
+
+def _breadcrumb_structured_data(request: Request, items: list[tuple[str, str]]):
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": index,
+        "name": name,
+        "item": _absolute_url(request, path),
+      }
+      for index, (name, path) in enumerate(items, start=1)
+    ],
+  }
+
+
+def _base_structured_data(request: Request, *, title: str, description: str, canonical_url: str, page_type: str):
+  website_url = _absolute_url(request, "/")
+  return [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "Earnings Analyzer",
+      "url": website_url,
+      "description": "Track earnings calendar dates and review AI-powered stock earnings analysis.",
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Earnings Analyzer",
+      "url": website_url,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": page_type,
+      "name": title,
+      "url": canonical_url,
+      "description": description,
+      "isPartOf": {
+        "@type": "WebSite",
+        "name": "Earnings Analyzer",
+        "url": website_url,
+      },
+    },
+  ]
+
+
+def _calendar_structured_data(request: Request, *, title: str, description: str, canonical_url: str, monday: date, friday: date, events: list[EarningsEvent]):
+  item_list = {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    "name": title,
+    "description": description,
+    "url": canonical_url,
+    "numberOfItems": len(events),
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": index,
+        "url": _absolute_url(request, f"/stocks/{quote(event.ticker.upper())}"),
+        "name": f"{event.company_name} ({event.ticker.upper()}) earnings",
+      }
+      for index, event in enumerate(events, start=1)
+    ],
+  }
+  event_entries = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Event",
+      "name": f"{event.company_name} ({event.ticker.upper()}) earnings report",
+      "startDate": _iso_datetime(event.report_date, event.report_time),
+      "eventStatus": "https://schema.org/EventScheduled" if event.report_date >= date.today() else "https://schema.org/EventCompleted",
+      "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
+      "url": _absolute_url(request, f"/stocks/{quote(event.ticker.upper())}"),
+      "organizer": {
+        "@type": "Organization",
+        "name": event.company_name,
+      },
+      "description": f"Earnings date for {event.company_name} ({event.ticker.upper()}) during the week of {monday.isoformat()} to {friday.isoformat()}.",
+    }
+    for event in events[:20]
+  ]
+  return [item_list, *event_entries]
+
+
+def _stock_structured_data(request: Request, *, title: str, description: str, canonical_url: str, company_name: str, ticker: str, primary_event: EarningsEvent, analysis: dict | None):
+  result = []
+  event_entry = {
+    "@context": "https://schema.org",
+    "@type": "Event",
+    "name": f"{company_name} ({ticker}) earnings report",
+    "startDate": _iso_datetime(primary_event.report_date, primary_event.report_time),
+    "eventStatus": "https://schema.org/EventScheduled" if primary_event.report_date >= date.today() else "https://schema.org/EventCompleted",
+    "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
+    "url": canonical_url,
+    "organizer": {
+      "@type": "Organization",
+      "name": company_name,
+    },
+    "description": description,
+  }
+  result.append(event_entry)
+  if analysis:
+    result.append(
+      {
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": title,
+        "description": description,
+        "mainEntityOfPage": canonical_url,
+        "author": {
+          "@type": "Organization",
+          "name": "Earnings Analyzer",
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "Earnings Analyzer",
+        },
+        "dateModified": analysis.get("analyzed_at"),
+        "about": [
+          company_name,
+          f"{ticker} earnings",
+          analysis.get("sentiment") or "earnings analysis",
+        ],
+      }
+    )
+  return result
+
+
+def _build_page(*, title: str, description: str, canonical_url: str, body: str, og_type: str = "website", structured_data: list[dict] | None = None, image_url: str | None = None):
     escaped_title = escape(title)
     escaped_description = escape(description)
     escaped_canonical = escape(canonical_url, quote=True)
+  og_image = escape(image_url or "", quote=True)
+  json_ld = _json_ld_scripts(structured_data)
     html = f"""<!doctype html>
 <html lang=\"en\">
   <head>
@@ -81,9 +233,14 @@ def _build_page(*, title: str, description: str, canonical_url: str, body: str, 
     <meta property=\"og:description\" content=\"{escaped_description}\" />
     <meta property=\"og:url\" content=\"{escaped_canonical}\" />
     <meta property=\"og:site_name\" content=\"Earnings Analyzer\" />
+    <meta property=\"og:image\" content=\"{og_image}\" />
+    <meta property=\"og:locale\" content=\"en_US\" />
     <meta name=\"twitter:card\" content=\"summary_large_image\" />
     <meta name=\"twitter:title\" content=\"{escaped_title}\" />
     <meta name=\"twitter:description\" content=\"{escaped_description}\" />
+    <meta name=\"twitter:url\" content=\"{escaped_canonical}\" />
+    <meta name=\"twitter:image\" content=\"{og_image}\" />
+    {json_ld}
     <style>
       :root {{
         color-scheme: dark;
@@ -148,9 +305,14 @@ def _build_page(*, title: str, description: str, canonical_url: str, body: str, 
     return HTMLResponse(html)
 
 
-def _page_shell(*, request: Request, title: str, description: str, canonical_path: str, body: str):
+def _page_shell(*, request: Request, title: str, description: str, canonical_path: str, body: str, og_type: str = "website", page_type: str = "WebPage", structured_data: list[dict] | None = None):
     canonical_url = _absolute_url(request, canonical_path)
-    return _build_page(title=title, description=description, canonical_url=canonical_url, body=body)
+  image_url = _absolute_url(request, "/favicon.svg")
+  page_structured_data = [
+    *_base_structured_data(request, title=title, description=description, canonical_url=canonical_url, page_type=page_type),
+    *(structured_data or []),
+  ]
+  return _build_page(title=title, description=description, canonical_url=canonical_url, body=body, og_type=og_type, structured_data=page_structured_data, image_url=image_url)
 
 
 def _site_header():
@@ -320,7 +482,20 @@ async def calendar_week(request: Request, week_start: str, db: AsyncSession = De
       {event_sections}
       <p class=\"footer\">Want a personalized watchlist and on-demand AI analysis generation? Open the <a href=\"/\">main app</a>.</p>
     """
-    return _page_shell(request=request, title=title, description=description, canonical_path=f"/calendar/{monday.isoformat()}", body=body)
+      canonical_path = f"/calendar/{monday.isoformat()}"
+      structured_data = [
+        _breadcrumb_structured_data(request, [("Home", "/"), ("Calendar", "/calendar"), (monday.isoformat(), canonical_path)]),
+        *_calendar_structured_data(
+          request,
+          title=title,
+          description=description,
+          canonical_url=_absolute_url(request, canonical_path),
+          monday=monday,
+          friday=friday,
+          events=events,
+        ),
+      ]
+      return _page_shell(request=request, title=title, description=description, canonical_path=canonical_path, body=body, page_type="CollectionPage", structured_data=structured_data)
 
 
 @router.get("/stocks/{ticker}", response_class=HTMLResponse, include_in_schema=False)
@@ -414,7 +589,21 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
         </aside>
       </section>
     """
-    return _page_shell(request=request, title=title, description=description, canonical_path=f"/stocks/{quote(upper)}", body=body)
+      canonical_path = f"/stocks/{quote(upper)}"
+      structured_data = [
+        _breadcrumb_structured_data(request, [("Home", "/"), ("Calendar", "/calendar"), (upper, canonical_path)]),
+        *_stock_structured_data(
+          request,
+          title=title,
+          description=description,
+          canonical_url=_absolute_url(request, canonical_path),
+          company_name=company_name,
+          ticker=upper,
+          primary_event=primary_event,
+          analysis=analysis,
+        ),
+      ]
+      return _page_shell(request=request, title=title, description=description, canonical_path=canonical_path, body=body, og_type="article", page_type="Article", structured_data=structured_data)
 
 
 async def get_public_sitemap_entries(db: AsyncSession):
