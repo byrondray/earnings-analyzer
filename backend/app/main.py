@@ -6,8 +6,9 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.requests import Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 
 from app.db.database import get_engine
 from app.db.models import Base
@@ -70,6 +71,35 @@ app.include_router(chart.router)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/robots.txt")
+async def robots_txt(request: Request):
+    sitemap_url = str(request.base_url.replace(path="sitemap.xml"))
+    content = "\n".join([
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /api/",
+        "Disallow: /assets/",
+        f"Sitemap: {sitemap_url}",
+    ])
+    return PlainTextResponse(content)
+
+
+@app.get("/sitemap.xml")
+async def sitemap_xml(request: Request):
+    homepage_url = str(request.base_url)
+    content = "\n".join([
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+        "  <url>",
+        f"    <loc>{homepage_url}</loc>",
+        "    <changefreq>daily</changefreq>",
+        "    <priority>1.0</priority>",
+        "  </url>",
+        "</urlset>",
+    ])
+    return Response(content=content, media_type="application/xml")
 
 
 if STATIC_DIR.is_dir():

@@ -31,8 +31,8 @@
       </h1>
 
       <p class="text-text-muted text-lg leading-relaxed mb-10 max-w-xl mx-auto">
-        Track upcoming earnings reports, get instant AI analysis of results,
-        and build a watchlist of stocks you care about — all in one place.
+        Track upcoming earnings reports, browse a weekly earnings calendar, get instant AI analysis of stock earnings results,
+        and build a watchlist of companies you care about — all in one place.
       </p>
 
       <div class="flex flex-col sm:flex-row gap-4 justify-center mb-16">
@@ -109,6 +109,74 @@
         <p class="text-text-muted text-sm leading-relaxed">
           Build a personal watchlist of stocks you care about. Favorite any ticker and see them front and center on your dashboard.
         </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="max-w-350 mx-auto px-6 pb-20">
+    <div class="max-w-3xl mx-auto text-center mb-10">
+      <h2 class="text-2xl font-extrabold mb-4">Built for traders following the earnings calendar</h2>
+      <p class="text-text-muted leading-relaxed">
+        Earnings Analyzer helps you monitor upcoming earnings dates, review market-moving quarterly reports, and understand the
+        biggest takeaways from earnings calls without digging through multiple tabs. Use it to spot notable earnings beats,
+        revenue surprises, guidance changes, and post-report price reactions faster.
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <article class="glass-card-solid rounded-2xl p-6 text-left">
+        <h3 class="font-bold text-lg mb-2">Track upcoming earnings dates</h3>
+        <p class="text-text-muted text-sm leading-relaxed">
+          Stay on top of the companies reporting this week with a simple earnings calendar that highlights the reports most
+          likely to move the market.
+        </p>
+      </article>
+
+      <article class="glass-card-solid rounded-2xl p-6 text-left">
+        <h3 class="font-bold text-lg mb-2">Review AI earnings summaries</h3>
+        <p class="text-text-muted text-sm leading-relaxed">
+          See earnings analysis that pulls together EPS results, revenue performance, forward guidance, sentiment, and price
+          reaction in one place.
+        </p>
+      </article>
+
+      <article class="glass-card-solid rounded-2xl p-6 text-left">
+        <h3 class="font-bold text-lg mb-2">Focus on the stocks you follow</h3>
+        <p class="text-text-muted text-sm leading-relaxed">
+          Build a personal watchlist so your most important earnings reports are easy to find before and after results land.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  <section class="max-w-350 mx-auto px-6 pb-20">
+    <div class="max-w-3xl mx-auto">
+      <h2 class="text-2xl font-extrabold text-center mb-10">Frequently asked questions</h2>
+
+      <div class="grid grid-cols-1 gap-4">
+        <article class="glass-card-solid rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-2">What is an earnings calendar?</h3>
+          <p class="text-text-muted text-sm leading-relaxed">
+            An earnings calendar shows when public companies are scheduled to report quarterly financial results. Traders and
+            investors use it to prepare for potential volatility around upcoming earnings dates.
+          </p>
+        </article>
+
+        <article class="glass-card-solid rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-2">What does the AI earnings analysis include?</h3>
+          <p class="text-text-muted text-sm leading-relaxed">
+            The analysis focuses on reported or expected EPS, revenue performance, management guidance, overall sentiment,
+            and how the stock reacted after earnings when market data is available.
+          </p>
+        </article>
+
+        <article class="glass-card-solid rounded-2xl p-6">
+          <h3 class="font-bold text-lg mb-2">Who is this useful for?</h3>
+          <p class="text-text-muted text-sm leading-relaxed">
+            It is designed for active investors, swing traders, and anyone who wants a faster way to follow stock earnings
+            reports and market-moving company updates.
+          </p>
+        </article>
       </div>
     </div>
   </section>
