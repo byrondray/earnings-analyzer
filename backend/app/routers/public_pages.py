@@ -10,12 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.db.models import EarningsEvent, ReportTime
+from app.routers.news import get_stock_news
 from app.services.analysis import get_cached_analysis
 from app.services.earnings_calendar import get_week_earnings, search_ticker, week_bounds
 
 router = APIRouter(tags=["public-pages"])
 
 _TICKER_LIMIT = 250
+_PUBLIC_NEWS_DAYS = 14
+_PUBLIC_NEWS_LIMIT = 5
 
 
 def _absolute_url(request: Request, path: str):
@@ -90,6 +93,56 @@ def _json_ld_scripts(items: list[dict] | None):
         for item in items
     )
 
+
+
+      def _build_news_item(article: dict):
+        url = article.get("url")
+        if not url:
+          return ""
+        title = escape(article.get("title") or "Untitled article")
+        source = escape(article.get("source") or "Unknown source")
+        published = escape(article.get("publishedAt") or "Recent")
+        description = escape(article.get("description") or "")
+        description_block = f'<p class="muted" style="margin-top:8px;">{description}</p>' if description else ""
+        return f"""
+          <a class="mini-link" href="{escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">
+          <strong>{title}</strong><br />
+          <span class="muted">{source} · {published}</span>
+          {description_block}
+          </a>
+        """
+
+
+      async def _fetch_public_news_articles(ticker: str):
+        response = await get_stock_news(ticker=ticker, days=_PUBLIC_NEWS_DAYS)
+        payload = json.loads(response.body.decode("utf-8"))
+        articles = payload.get("articles") or []
+        return articles[:_PUBLIC_NEWS_LIMIT]
+
+
+      def _stock_news_structured_data(*, canonical_url: str, company_name: str, articles: list[dict]):
+        result = []
+        for article in articles:
+          url = article.get("url")
+          title = article.get("title")
+          if not url or not title:
+            continue
+          result.append(
+            {
+              "@context": "https://schema.org",
+              "@type": "NewsArticle",
+              "headline": title,
+              "url": url,
+              "description": article.get("description") or f"Recent market coverage for {company_name} earnings.",
+              "mainEntityOfPage": canonical_url,
+              "publisher": {
+                "@type": "Organization",
+                "name": article.get("source") or "Earnings Analyzer",
+              },
+              "datePublished": article.get("publishedAt"),
+            }
+          )
+        return result
 
 def _breadcrumb_structured_data(request: Request, items: list[tuple[str, str]]):
     return {
@@ -703,6 +756,12 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
     analysis_blocks = _build_analysis_cards(analysis)
     primary_calendar_href = f"/calendar/{primary_event.report_date.isoformat()}"
     next_label = "Upcoming earnings date" if upcoming_event else "Latest earnings date"
+    news_articles = await _fetch_public_news_articles(upper)
+    news_block = "".join(
+      _build_news_item(article)
+      for article in news_articles
+      if article.get("url")
+    )
 
     week_events = await get_week_earnings(db, primary_event.report_date)
     related_events = [
@@ -737,6 +796,12 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
           <a href=\"/#/stock/{quote(upper)}\">Open in the app</a>
         </div>
       </section>
+          <section class="card">
+            <h2>Recent earnings news</h2>
+            <div class="mini-list">
+              {news_block if news_block else '<p class="muted">No recent earnings news is available right now.</p>'}
+            </div>
+          </section>
       <section class=\"split\">
         <div class=\"grid\">
           <section class=\"card\">
@@ -748,18 +813,24 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
             <p>Revenue estimate: {_format_currency(primary_event.revenue_estimate)}</p>
             <p>Market cap: {_format_currency(primary_event.market_cap)}</p>
           </section>
+    canonical_url = _absolute_url(request, canonical_path)
           {analysis_blocks}
           <section class=\"card\">
             <div class=\"section-header\">
               <h2>Recent earnings history</h2>
               <a href=\"{primary_calendar_href}\">Browse the calendar week</a>
             </div>
-            <table class=\"table\" aria-label=\"Recent earnings history\">
+            canonical_url=canonical_url,
               <thead>
                 <tr>
                   <th>Date</th>
                   <th>Quarter</th>
                   <th>Report window</th>
+        *_stock_news_structured_data(
+            canonical_url=canonical_url,
+            company_name=company_name,
+            articles=news_articles,
+        ),
                   <th>EPS est.</th>
                   <th>Revenue est.</th>
                 </tr>
