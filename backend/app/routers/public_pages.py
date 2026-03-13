@@ -336,7 +336,7 @@ def _site_header():
         <a class=\"brand\" href=\"/\"><span>Earnings</span> Analyzer</a>
         <nav class=\"nav\" aria-label=\"Primary\">
           <a href=\"/calendar\">Weekly earnings calendar</a>
-          <a href=\"/\">Main app</a>
+          <a href=\"/app\">Main app</a>
         </nav>
       </header>
     """
@@ -430,6 +430,17 @@ def _build_analysis_cards(analysis: dict | None):
     """
 
 
+def _build_featured_card(event: EarningsEvent):
+    href = f"/stocks/{quote(event.ticker.upper())}"
+    market_cap = _format_currency(event.market_cap)
+    return f"""
+      <a class=\"mini-link\" href=\"{href}\">
+        <strong class=\"ticker\">{escape(event.ticker.upper())}</strong> · {escape(event.company_name)}<br />
+        <span class=\"muted\">{_format_short_date(event.report_date)} · {_report_time_label(event.report_time)} · Market cap {market_cap}</span>
+      </a>
+    """
+
+
 def _build_stock_description(company_name: str, ticker: str, primary_event: EarningsEvent | None, analysis: dict | None):
     if primary_event is None:
         return f"Review {company_name} ({ticker}) earnings analysis, historical report dates, and quarterly expectations."
@@ -437,6 +448,130 @@ def _build_stock_description(company_name: str, ticker: str, primary_event: Earn
     if analysis and analysis.get("sentiment"):
         return f"Review {company_name} ({ticker}) earnings analysis, EPS and revenue context, and sentiment. {event_context}."
     return f"Track {company_name} ({ticker}) earnings date, quarterly estimates, and recent earnings history. {event_context}."
+
+
+@router.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def marketing_home(request: Request, db: AsyncSession = Depends(get_db)):
+    today = date.today()
+    current_monday, current_friday = week_bounds(today)
+    previous_monday, previous_friday = week_bounds(today - timedelta(weeks=1))
+
+    current_events = await get_week_earnings(db, current_monday)
+    previous_events = await get_week_earnings(db, previous_monday)
+
+    current_top = sorted(current_events, key=lambda event: -(event.market_cap or 0))[:6]
+    previous_top = sorted(previous_events, key=lambda event: -(event.market_cap or 0))[:6]
+
+    current_block = "".join(_build_featured_card(event) for event in current_top) or '<p class="muted">No current-week earnings data is available yet.</p>'
+    previous_block = "".join(_build_featured_card(event) for event in previous_top) or '<p class="muted">No previous-week earnings data is available yet.</p>'
+
+    title = "Earnings Analyzer | Weekly Earnings Calendar and AI Stock Earnings Analysis"
+    description = "Track the weekly earnings calendar, review recent stock earnings reports, and explore AI-powered earnings analysis for public companies."
+
+    body = f"""
+      {_site_header()}
+      <section class=\"hero\">
+        <span class=\"eyebrow\">Public earnings hub</span>
+        <h1>Weekly earnings calendar and AI-powered stock earnings analysis</h1>
+        <p class=\"summary\">Follow upcoming earnings dates, revisit last week's biggest reports, and drill into company-specific earnings pages built for organic discovery and fast research.</p>
+        <div class=\"nav\">
+          <a href=\"/calendar\">Browse the earnings calendar</a>
+          <a href=\"/app\">Open the full app</a>
+        </div>
+      </section>
+      <section class=\"grid cards\">
+        <article class=\"card\">
+          <h2>Track the market-moving reports</h2>
+          <p>Browse a public earnings calendar with direct links to stock-specific pages for upcoming and recently reported companies.</p>
+        </article>
+        <article class=\"card\">
+          <h2>Review AI earnings summaries</h2>
+          <p>Public stock pages surface cached earnings analysis, estimates, historical report context, and structured data for search engines.</p>
+        </article>
+        <article class=\"card\">
+          <h2>Use the full app when you need more</h2>
+          <p>Open the app for favorites, watchlists, and on-demand earnings analysis generation after you find a company worth tracking.</p>
+        </article>
+      </section>
+      <section class=\"section\">
+        <div class=\"section-header\">
+          <h2>This week's top earnings</h2>
+          <a href=\"/calendar/{current_monday.isoformat()}\">View full week</a>
+        </div>
+        <div class=\"mini-list\">{current_block}</div>
+      </section>
+      <section class=\"section\">
+        <div class=\"section-header\">
+          <h2>Last week's notable earnings</h2>
+          <a href=\"/calendar/{previous_monday.isoformat()}\">Review last week</a>
+        </div>
+        <div class=\"mini-list\">{previous_block}</div>
+      </section>
+      <section class=\"section\">
+        <div class=\"section-header\">
+          <h2>Frequently asked questions</h2>
+        </div>
+        <div class=\"grid cards\">
+          <article class=\"card\">
+            <h3>What is an earnings calendar?</h3>
+            <p>An earnings calendar shows when public companies are expected to report quarterly results, helping traders and investors plan around high-volatility dates.</p>
+          </article>
+          <article class=\"card\">
+            <h3>What does the analysis include?</h3>
+            <p>Stock pages summarize EPS and revenue expectations, post-report surprises when available, sentiment, guidance, and recent earnings history.</p>
+          </article>
+          <article class=\"card\">
+            <h3>When should I use the app?</h3>
+            <p>Use the full app when you want favorites, a personal watchlist, or on-demand analysis generation for a company after finding it through the public pages.</p>
+          </article>
+        </div>
+      </section>
+      <p class=\"footer\">Looking for the interactive experience? Head to the <a href=\"/app\">full app</a>.</p>
+    """
+
+    structured_data = [
+        _breadcrumb_structured_data(request, [("Home", "/")]),
+        {
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+                {
+                    "@type": "Question",
+                    "name": "What is an earnings calendar?",
+                    "acceptedAnswer": {
+                        "@type": "Answer",
+                        "text": "An earnings calendar shows when public companies are expected to report quarterly results, helping traders and investors plan around high-volatility dates.",
+                    },
+                },
+                {
+                    "@type": "Question",
+                    "name": "What does the analysis include?",
+                    "acceptedAnswer": {
+                        "@type": "Answer",
+                        "text": "Stock pages summarize EPS and revenue expectations, post-report surprises when available, sentiment, guidance, and recent earnings history.",
+                    },
+                },
+                {
+                    "@type": "Question",
+                    "name": "When should I use the app?",
+                    "acceptedAnswer": {
+                        "@type": "Answer",
+                        "text": "Use the full app when you want favorites, a personal watchlist, or on-demand analysis generation for a company after finding it through the public pages.",
+                    },
+                },
+            ],
+        },
+    ]
+
+    return _page_shell(
+        request=request,
+        title=title,
+        description=description,
+        canonical_path="/",
+        body=body,
+        page_type="WebPage",
+        structured_data=structured_data,
+    )
 
 
 @router.get("/calendar", response_class=HTMLResponse, include_in_schema=False)
@@ -505,7 +640,7 @@ async def calendar_week(request: Request, week_start: str, db: AsyncSession = De
         </div>
       </section>
       {event_sections}
-      <p class=\"footer\">Want a personalized watchlist and on-demand AI analysis generation? Open the <a href=\"/\">main app</a>.</p>
+      <p class=\"footer\">Want a personalized watchlist and on-demand AI analysis generation? Open the <a href=\"/app\">main app</a>.</p>
     """
     canonical_path = f"/calendar/{monday.isoformat()}"
     structured_data = [
@@ -644,7 +779,7 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
           <section class=\"card\">
             <h2>Explore more earnings pages</h2>
             <p><a href=\"/calendar\" style=\"color:var(--accent);text-decoration:none;\">Browse this week's earnings calendar</a></p>
-            <p><a href=\"/\" style=\"color:var(--accent);text-decoration:none;\">Launch the main app</a></p>
+            <p><a href=\"/app\" style=\"color:var(--accent);text-decoration:none;\">Launch the main app</a></p>
             <p class=\"muted\">Use the app for favorites, watchlists, and on-demand analysis generation.</p>
           </section>
         </aside>

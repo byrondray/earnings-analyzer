@@ -83,6 +83,7 @@ async def robots_txt(request: Request):
         "Allow: /",
         "Allow: /calendar",
         "Allow: /stocks/",
+        "Disallow: /app",
         "Disallow: /api/",
         f"Sitemap: {sitemap_url}",
     ])
@@ -114,6 +115,10 @@ async def sitemap_xml(request: Request, db: AsyncSession = Depends(get_db)):
 
 if STATIC_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
+    @app.get("/app")
+    async def serve_app_root():
+        return FileResponse(STATIC_DIR / "index.html")
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
