@@ -4,15 +4,16 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, PlainTextResponse, Response
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.database import get_engine
+from app.db.database import get_db, get_engine
 from app.db.models import Base
-from app.routers import calendar, analysis, favorites, news, chart
+from app.routers import analysis, calendar, chart, favorites, news, public_pages
 from app.services.cache import close_redis
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
@@ -66,6 +67,7 @@ app.include_router(analysis.router)
 app.include_router(favorites.router)
 app.include_router(news.router)
 app.include_router(chart.router)
+app.include_router(public_pages.router)
 
 
 @app.get("/health")
@@ -79,24 +81,31 @@ async def robots_txt(request: Request):
     content = "\n".join([
         "User-agent: *",
         "Allow: /",
+        "Allow: /calendar",
+        "Allow: /stocks/",
         "Disallow: /api/",
-        "Disallow: /assets/",
         f"Sitemap: {sitemap_url}",
     ])
     return PlainTextResponse(content)
 
 
 @app.get("/sitemap.xml")
-async def sitemap_xml(request: Request):
-    homepage_url = str(request.base_url)
+async def sitemap_xml(request: Request, db: AsyncSession = Depends(get_db)):
+    entries = await public_pages.get_public_sitemap_entries(db)
+    base_url = str(request.base_url).rstrip("/")
     content = "\n".join([
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>",
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-        "  <url>",
-        f"    <loc>{homepage_url}</loc>",
-        "    <changefreq>daily</changefreq>",
-        "    <priority>1.0</priority>",
-        "  </url>",
+        *[
+            "\n".join([
+                "  <url>",
+                f"    <loc>{base_url}{entry['path']}</loc>",
+                f"    <changefreq>{entry['changefreq']}</changefreq>",
+                f"    <priority>{entry['priority']}</priority>",
+                "  </url>",
+            ])
+            for entry in entries
+        ],
         "</urlset>",
     ])
     return Response(content=content, media_type="application/xml")
