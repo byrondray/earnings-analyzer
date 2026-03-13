@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -65,160 +65,167 @@ def _report_time_label(value: ReportTime | str | None):
 
 
 def _iso_datetime(value: date | None, report_time: ReportTime | str | None = None):
-  if value is None:
-    return None
-  hour = 21
-  if report_time == ReportTime.PRE_MARKET or report_time == "pre_market":
-    hour = 13
-  elif report_time == ReportTime.POST_MARKET or report_time == "post_market":
+    if value is None:
+        return None
     hour = 21
-  return datetime.combine(value, datetime.min.time()).replace(hour=hour).isoformat()
+    if report_time == ReportTime.PRE_MARKET or report_time == "pre_market":
+        hour = 13
+    return datetime.combine(value, datetime.min.time()).replace(hour=hour).isoformat()
+
+
+def _parse_iso_datetime(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 def _json_ld_scripts(items: list[dict] | None):
-  if not items:
-    return ""
-  return "\n".join(
-    f'<script type="application/ld+json">{escape(json.dumps(item, ensure_ascii=False), quote=False)}</script>'
-    for item in items
-  )
+    if not items:
+        return ""
+    return "\n".join(
+        f'<script type="application/ld+json">{escape(json.dumps(item, ensure_ascii=False), quote=False)}</script>'
+        for item in items
+    )
 
 
 def _breadcrumb_structured_data(request: Request, items: list[tuple[str, str]]):
-  return {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      {
-        "@type": "ListItem",
-        "position": index,
-        "name": name,
-        "item": _absolute_url(request, path),
-      }
-      for index, (name, path) in enumerate(items, start=1)
-    ],
-  }
+    return {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": index,
+                "name": name,
+                "item": _absolute_url(request, path),
+            }
+            for index, (name, path) in enumerate(items, start=1)
+        ],
+    }
 
 
 def _base_structured_data(request: Request, *, title: str, description: str, canonical_url: str, page_type: str):
-  website_url = _absolute_url(request, "/")
-  return [
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "Earnings Analyzer",
-      "url": website_url,
-      "description": "Track earnings calendar dates and review AI-powered stock earnings analysis.",
-    },
-    {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      "name": "Earnings Analyzer",
-      "url": website_url,
-    },
-    {
-      "@context": "https://schema.org",
-      "@type": page_type,
-      "name": title,
-      "url": canonical_url,
-      "description": description,
-      "isPartOf": {
-        "@type": "WebSite",
-        "name": "Earnings Analyzer",
-        "url": website_url,
-      },
-    },
-  ]
+    website_url = _absolute_url(request, "/")
+    return [
+        {
+            "@context": "https://schema.org",
+            "@type": "WebSite",
+            "name": "Earnings Analyzer",
+            "url": website_url,
+            "description": "Track earnings calendar dates and review AI-powered stock earnings analysis.",
+        },
+        {
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "name": "Earnings Analyzer",
+            "url": website_url,
+        },
+        {
+            "@context": "https://schema.org",
+            "@type": page_type,
+            "name": title,
+            "url": canonical_url,
+            "description": description,
+            "isPartOf": {
+                "@type": "WebSite",
+                "name": "Earnings Analyzer",
+                "url": website_url,
+            },
+        },
+    ]
 
 
 def _calendar_structured_data(request: Request, *, title: str, description: str, canonical_url: str, monday: date, friday: date, events: list[EarningsEvent]):
-  item_list = {
-    "@context": "https://schema.org",
-    "@type": "ItemList",
-    "name": title,
-    "description": description,
-    "url": canonical_url,
-    "numberOfItems": len(events),
-    "itemListElement": [
-      {
-        "@type": "ListItem",
-        "position": index,
-        "url": _absolute_url(request, f"/stocks/{quote(event.ticker.upper())}"),
-        "name": f"{event.company_name} ({event.ticker.upper()}) earnings",
-      }
-      for index, event in enumerate(events, start=1)
-    ],
-  }
-  event_entries = [
-    {
-      "@context": "https://schema.org",
-      "@type": "Event",
-      "name": f"{event.company_name} ({event.ticker.upper()}) earnings report",
-      "startDate": _iso_datetime(event.report_date, event.report_time),
-      "eventStatus": "https://schema.org/EventScheduled" if event.report_date >= date.today() else "https://schema.org/EventCompleted",
-      "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
-      "url": _absolute_url(request, f"/stocks/{quote(event.ticker.upper())}"),
-      "organizer": {
-        "@type": "Organization",
-        "name": event.company_name,
-      },
-      "description": f"Earnings date for {event.company_name} ({event.ticker.upper()}) during the week of {monday.isoformat()} to {friday.isoformat()}.",
+    item_list = {
+        "@context": "https://schema.org",
+        "@type": "ItemList",
+        "name": title,
+        "description": description,
+        "url": canonical_url,
+        "numberOfItems": len(events),
+        "itemListElement": [
+            {
+                "@type": "ListItem",
+                "position": index,
+                "url": _absolute_url(request, f"/stocks/{quote(event.ticker.upper())}"),
+                "name": f"{event.company_name} ({event.ticker.upper()}) earnings",
+            }
+            for index, event in enumerate(events, start=1)
+        ],
     }
-    for event in events[:20]
-  ]
-  return [item_list, *event_entries]
+    event_entries = [
+        {
+            "@context": "https://schema.org",
+            "@type": "Event",
+            "name": f"{event.company_name} ({event.ticker.upper()}) earnings report",
+            "startDate": _iso_datetime(event.report_date, event.report_time),
+            "eventStatus": "https://schema.org/EventScheduled" if event.report_date >= date.today() else "https://schema.org/EventCompleted",
+            "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
+            "url": _absolute_url(request, f"/stocks/{quote(event.ticker.upper())}"),
+            "organizer": {
+                "@type": "Organization",
+                "name": event.company_name,
+            },
+            "description": f"Earnings date for {event.company_name} ({event.ticker.upper()}) during the week of {monday.isoformat()} to {friday.isoformat()}.",
+        }
+        for event in events[:20]
+    ]
+    return [item_list, *event_entries]
 
 
 def _stock_structured_data(request: Request, *, title: str, description: str, canonical_url: str, company_name: str, ticker: str, primary_event: EarningsEvent, analysis: dict | None):
-  result = []
-  event_entry = {
-    "@context": "https://schema.org",
-    "@type": "Event",
-    "name": f"{company_name} ({ticker}) earnings report",
-    "startDate": _iso_datetime(primary_event.report_date, primary_event.report_time),
-    "eventStatus": "https://schema.org/EventScheduled" if primary_event.report_date >= date.today() else "https://schema.org/EventCompleted",
-    "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
-    "url": canonical_url,
-    "organizer": {
-      "@type": "Organization",
-      "name": company_name,
-    },
-    "description": description,
-  }
-  result.append(event_entry)
-  if analysis:
-    result.append(
-      {
-        "@context": "https://schema.org",
-        "@type": "Article",
-        "headline": title,
-        "description": description,
-        "mainEntityOfPage": canonical_url,
-        "author": {
-          "@type": "Organization",
-          "name": "Earnings Analyzer",
-        },
-        "publisher": {
-          "@type": "Organization",
-          "name": "Earnings Analyzer",
-        },
-        "dateModified": analysis.get("analyzed_at"),
-        "about": [
-          company_name,
-          f"{ticker} earnings",
-          analysis.get("sentiment") or "earnings analysis",
-        ],
-      }
-    )
-  return result
+    result = [
+        {
+            "@context": "https://schema.org",
+            "@type": "Event",
+            "name": f"{company_name} ({ticker}) earnings report",
+            "startDate": _iso_datetime(primary_event.report_date, primary_event.report_time),
+            "eventStatus": "https://schema.org/EventScheduled" if primary_event.report_date >= date.today() else "https://schema.org/EventCompleted",
+            "eventAttendanceMode": "https://schema.org/OnlineEventAttendanceMode",
+            "url": canonical_url,
+            "organizer": {
+                "@type": "Organization",
+                "name": company_name,
+            },
+            "description": description,
+        }
+    ]
+    if analysis:
+        result.append(
+            {
+                "@context": "https://schema.org",
+                "@type": "Article",
+                "headline": title,
+                "description": description,
+                "mainEntityOfPage": canonical_url,
+                "author": {
+                    "@type": "Organization",
+                    "name": "Earnings Analyzer",
+                },
+                "publisher": {
+                    "@type": "Organization",
+                    "name": "Earnings Analyzer",
+                },
+                "dateModified": analysis.get("analyzed_at"),
+                "about": [
+                    company_name,
+                    f"{ticker} earnings",
+                    analysis.get("sentiment") or "earnings analysis",
+                ],
+            }
+        )
+    return result
 
 
 def _build_page(*, title: str, description: str, canonical_url: str, body: str, og_type: str = "website", structured_data: list[dict] | None = None, image_url: str | None = None):
     escaped_title = escape(title)
     escaped_description = escape(description)
     escaped_canonical = escape(canonical_url, quote=True)
-  og_image = escape(image_url or "", quote=True)
-  json_ld = _json_ld_scripts(structured_data)
+    og_image = escape(image_url or "", quote=True)
+    json_ld = _json_ld_scripts(structured_data)
     html = f"""<!doctype html>
 <html lang=\"en\">
   <head>
@@ -246,7 +253,6 @@ def _build_page(*, title: str, description: str, canonical_url: str, body: str, 
         color-scheme: dark;
         --bg: #0c0c0c;
         --panel: #151515;
-        --panel-alt: #1d1d1d;
         --text: #f5f5f5;
         --muted: #a3a3a3;
         --border: rgba(255,255,255,0.08);
@@ -287,13 +293,14 @@ def _build_page(*, title: str, description: str, canonical_url: str, body: str, 
       .section-header a {{ color: var(--accent); text-decoration: none; font-weight: 600; }}
       .breadcrumbs {{ display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 0.92rem; margin-bottom: 16px; }}
       .breadcrumbs a {{ color: var(--muted); text-decoration: none; }}
-      .copy a {{ color: var(--accent); text-decoration: none; }}
       .summary {{ font-size: 1.02rem; max-width: 860px; }}
       .table {{ width: 100%; border-collapse: collapse; }}
-      .table td {{ padding: 10px 0; border-bottom: 1px solid var(--border); }}
-      .table td:last-child {{ text-align: right; color: var(--text); font-weight: 700; }}
+      .table th, .table td {{ padding: 10px 0; border-bottom: 1px solid var(--border); text-align: left; }}
+      .table td:last-child {{ color: var(--text); font-weight: 700; }}
       .split {{ display: grid; gap: 20px; grid-template-columns: 2fr 1fr; }}
-      .tag {{ display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; background: rgba(212,160,23,0.12); color: var(--gold); font-weight: 700; }}
+      .mini-list {{ display: grid; gap: 10px; }}
+      .mini-link {{ display: block; text-decoration: none; color: inherit; padding: 12px 14px; border: 1px solid var(--border); border-radius: 14px; background: rgba(255,255,255,0.02); }}
+      .mini-link:hover {{ border-color: rgba(52,172,86,0.45); }}
       .footer {{ margin-top: 36px; color: var(--muted); font-size: 0.92rem; }}
       @media (max-width: 860px) {{ .split {{ grid-template-columns: 1fr; }} .event {{ flex-direction: column; }} .event-meta {{ text-align: left; min-width: 0; }} }}
     </style>
@@ -307,12 +314,20 @@ def _build_page(*, title: str, description: str, canonical_url: str, body: str, 
 
 def _page_shell(*, request: Request, title: str, description: str, canonical_path: str, body: str, og_type: str = "website", page_type: str = "WebPage", structured_data: list[dict] | None = None):
     canonical_url = _absolute_url(request, canonical_path)
-  image_url = _absolute_url(request, "/favicon.svg")
-  page_structured_data = [
-    *_base_structured_data(request, title=title, description=description, canonical_url=canonical_url, page_type=page_type),
-    *(structured_data or []),
-  ]
-  return _build_page(title=title, description=description, canonical_url=canonical_url, body=body, og_type=og_type, structured_data=page_structured_data, image_url=image_url)
+    image_url = _absolute_url(request, "/favicon.svg")
+    page_structured_data = [
+        *_base_structured_data(request, title=title, description=description, canonical_url=canonical_url, page_type=page_type),
+        *(structured_data or []),
+    ]
+    return _build_page(
+        title=title,
+        description=description,
+        canonical_url=canonical_url,
+        body=body,
+        og_type=og_type,
+        structured_data=page_structured_data,
+        image_url=image_url,
+    )
 
 
 def _site_header():
@@ -338,7 +353,7 @@ def _build_calendar_event(event: EarningsEvent):
         <div>
           <div class=\"event-title\"><span class=\"ticker\">{escape(event.ticker.upper())}</span> · {escape(event.company_name)}</div>
           <p>{report_date}</p>
-          <p class=\"copy\">Expected report window: {_report_time_label(event.report_time)}. Explore this stock's earnings summary, estimates, and recent report history.</p>
+          <p>Expected report window: {_report_time_label(event.report_time)}. Explore this stock's earnings summary, estimates, and recent report history.</p>
         </div>
         <div class=\"event-meta\">
           <div class=\"pill\"><strong>Quarter</strong> {escape(event.fiscal_quarter or 'N/A')}</div>
@@ -363,6 +378,16 @@ def _build_stock_history_item(event: EarningsEvent):
     """
 
 
+def _build_related_stock_item(event: EarningsEvent):
+    href = f"/stocks/{quote(event.ticker.upper())}"
+    return f"""
+      <a class=\"mini-link\" href=\"{href}\">
+        <strong class=\"ticker\">{escape(event.ticker.upper())}</strong> · {escape(event.company_name)}<br />
+        <span class=\"muted\">{_format_short_date(event.report_date)} · {_report_time_label(event.report_time)} · Market cap { _format_currency(event.market_cap) }</span>
+      </a>
+    """
+
+
 def _build_analysis_cards(analysis: dict | None):
     if not analysis:
         return """
@@ -375,7 +400,7 @@ def _build_analysis_cards(analysis: dict | None):
     guidance = escape(analysis.get("guidance_summary") or "No guidance summary is available yet.")
     sentiment = escape((analysis.get("sentiment") or "neutral").upper())
     highlights = escape((analysis.get("raw_analysis") or {}).get("financial_highlights") or "")
-    highlights_block = f"<div class=\"card\"><h2>Financial highlights</h2><p>{highlights}</p></div>" if highlights else ""
+    highlights_block = f'<div class="card"><h2>Financial highlights</h2><p>{highlights}</p></div>' if highlights else ""
     return f"""
       <div class=\"grid cards\">
         <section class=\"card\">
@@ -482,20 +507,28 @@ async def calendar_week(request: Request, week_start: str, db: AsyncSession = De
       {event_sections}
       <p class=\"footer\">Want a personalized watchlist and on-demand AI analysis generation? Open the <a href=\"/\">main app</a>.</p>
     """
-      canonical_path = f"/calendar/{monday.isoformat()}"
-      structured_data = [
+    canonical_path = f"/calendar/{monday.isoformat()}"
+    structured_data = [
         _breadcrumb_structured_data(request, [("Home", "/"), ("Calendar", "/calendar"), (monday.isoformat(), canonical_path)]),
         *_calendar_structured_data(
-          request,
-          title=title,
-          description=description,
-          canonical_url=_absolute_url(request, canonical_path),
-          monday=monday,
-          friday=friday,
-          events=events,
+            request,
+            title=title,
+            description=description,
+            canonical_url=_absolute_url(request, canonical_path),
+            monday=monday,
+            friday=friday,
+            events=events,
         ),
-      ]
-      return _page_shell(request=request, title=title, description=description, canonical_path=canonical_path, body=body, page_type="CollectionPage", structured_data=structured_data)
+    ]
+    return _page_shell(
+        request=request,
+        title=title,
+        description=description,
+        canonical_path=canonical_path,
+        body=body,
+        page_type="CollectionPage",
+        structured_data=structured_data,
+    )
 
 
 @router.get("/stocks/{ticker}", response_class=HTMLResponse, include_in_schema=False)
@@ -528,10 +561,28 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
     analysis = await get_cached_analysis(db, upper)
     title = f"{company_name} ({upper}) Earnings Analysis & Earnings Date | Earnings Analyzer"
     description = _build_stock_description(company_name, upper, primary_event, analysis)
-    history_rows = "".join(_build_stock_history_item(event) for event in sorted(events, key=lambda event: event.report_date, reverse=True)[:8])
+    history_rows = "".join(
+        _build_stock_history_item(event)
+        for event in sorted(events, key=lambda event: event.report_date, reverse=True)[:8]
+    )
     analysis_blocks = _build_analysis_cards(analysis)
     primary_calendar_href = f"/calendar/{primary_event.report_date.isoformat()}"
     next_label = "Upcoming earnings date" if upcoming_event else "Latest earnings date"
+
+    week_events = await get_week_earnings(db, primary_event.report_date)
+    related_events = [
+        event
+        for event in week_events
+        if event.ticker.upper() != upper
+    ][:6]
+    related_block = ""
+    if related_events:
+        related_block = f"""
+          <section class=\"card\">
+            <h2>Other companies reporting this week</h2>
+            <div class=\"mini-list\">{''.join(_build_related_stock_item(event) for event in related_events)}</div>
+          </section>
+        """
 
     body = f"""
       {_site_header()}
@@ -569,6 +620,15 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
               <a href=\"{primary_calendar_href}\">Browse the calendar week</a>
             </div>
             <table class=\"table\" aria-label=\"Recent earnings history\">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Quarter</th>
+                  <th>Report window</th>
+                  <th>EPS est.</th>
+                  <th>Revenue est.</th>
+                </tr>
+              </thead>
               <tbody>
                 {history_rows}
               </tbody>
@@ -580,6 +640,7 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
             <h2>Why this page exists</h2>
             <p>This public page makes earnings dates, quarterly estimates, and recent stock earnings analysis easier to discover without logging in.</p>
           </section>
+          {related_block}
           <section class=\"card\">
             <h2>Explore more earnings pages</h2>
             <p><a href=\"/calendar\" style=\"color:var(--accent);text-decoration:none;\">Browse this week's earnings calendar</a></p>
@@ -589,47 +650,70 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
         </aside>
       </section>
     """
-      canonical_path = f"/stocks/{quote(upper)}"
-      structured_data = [
+    canonical_path = f"/stocks/{quote(upper)}"
+    structured_data = [
         _breadcrumb_structured_data(request, [("Home", "/"), ("Calendar", "/calendar"), (upper, canonical_path)]),
         *_stock_structured_data(
-          request,
-          title=title,
-          description=description,
-          canonical_url=_absolute_url(request, canonical_path),
-          company_name=company_name,
-          ticker=upper,
-          primary_event=primary_event,
-          analysis=analysis,
+            request,
+            title=title,
+            description=description,
+            canonical_url=_absolute_url(request, canonical_path),
+            company_name=company_name,
+            ticker=upper,
+            primary_event=primary_event,
+            analysis=analysis,
         ),
-      ]
-      return _page_shell(request=request, title=title, description=description, canonical_path=canonical_path, body=body, og_type="article", page_type="Article", structured_data=structured_data)
+    ]
+    return _page_shell(
+        request=request,
+        title=title,
+        description=description,
+        canonical_path=canonical_path,
+        body=body,
+        og_type="article",
+        page_type="Article",
+        structured_data=structured_data,
+    )
 
 
 async def get_public_sitemap_entries(db: AsyncSession):
     today = date.today()
     current_week, _ = week_bounds(today)
     paths = [
-        {"path": "/", "changefreq": "daily", "priority": "1.0"},
-        {"path": "/calendar", "changefreq": "daily", "priority": "0.9"},
-        {"path": f"/calendar/{current_week.isoformat()}", "changefreq": "daily", "priority": "0.9"},
+        {"path": "/", "changefreq": "daily", "priority": "1.0", "lastmod": today.isoformat()},
+        {"path": "/calendar", "changefreq": "daily", "priority": "0.9", "lastmod": today.isoformat()},
+        {"path": f"/calendar/{current_week.isoformat()}", "changefreq": "daily", "priority": "0.9", "lastmod": today.isoformat()},
     ]
 
     for offset in (-1, 1):
-        week_start = (current_week + timedelta(weeks=offset)).isoformat()
-        paths.append({"path": f"/calendar/{week_start}", "changefreq": "daily", "priority": "0.7"})
+        week_start = current_week + timedelta(weeks=offset)
+        paths.append(
+            {
+                "path": f"/calendar/{week_start.isoformat()}",
+                "changefreq": "daily",
+                "priority": "0.7",
+                "lastmod": today.isoformat(),
+            }
+        )
 
     ticker_query = (
-        select(EarningsEvent.ticker)
+        select(EarningsEvent.ticker, func.max(EarningsEvent.report_date))
         .where(EarningsEvent.report_date >= today - timedelta(days=30))
         .where(EarningsEvent.report_date <= today + timedelta(days=120))
-        .distinct()
-        .order_by(EarningsEvent.ticker)
+        .group_by(EarningsEvent.ticker)
+        .order_by(func.max(EarningsEvent.report_date).desc(), EarningsEvent.ticker)
         .limit(_TICKER_LIMIT)
     )
     ticker_result = await db.execute(ticker_query)
-    tickers = list(ticker_result.scalars().all())
-    for ticker in tickers:
-        paths.append({"path": f"/stocks/{quote(ticker.upper())}", "changefreq": "daily", "priority": "0.8"})
+    tickers = list(ticker_result.all())
+    for ticker, report_date in tickers:
+        paths.append(
+            {
+                "path": f"/stocks/{quote(ticker.upper())}",
+                "changefreq": "daily",
+                "priority": "0.8",
+                "lastmod": report_date.isoformat() if report_date else today.isoformat(),
+            }
+        )
 
     return paths

@@ -100,6 +100,7 @@ async def sitemap_xml(request: Request, db: AsyncSession = Depends(get_db)):
             "\n".join([
                 "  <url>",
                 f"    <loc>{base_url}{entry['path']}</loc>",
+                *( [f"    <lastmod>{entry['lastmod']}</lastmod>"] if entry.get('lastmod') else [] ),
                 f"    <changefreq>{entry['changefreq']}</changefreq>",
                 f"    <priority>{entry['priority']}</priority>",
                 "  </url>",
