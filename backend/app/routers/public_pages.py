@@ -95,54 +95,54 @@ def _json_ld_scripts(items: list[dict] | None):
 
 
 
-      def _build_news_item(article: dict):
+def _build_news_item(article: dict):
+    url = article.get("url")
+    if not url:
+        return ""
+    title = escape(article.get("title") or "Untitled article")
+    source = escape(article.get("source") or "Unknown source")
+    published = escape(article.get("publishedAt") or "Recent")
+    description = escape(article.get("description") or "")
+    description_block = f'<p class="muted" style="margin-top:8px;">{description}</p>' if description else ""
+    return f"""
+      <a class="mini-link" href="{escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">
+      <strong>{title}</strong><br />
+      <span class="muted">{source} · {published}</span>
+      {description_block}
+      </a>
+    """
+
+
+async def _fetch_public_news_articles(ticker: str):
+    response = await get_stock_news(ticker=ticker, days=_PUBLIC_NEWS_DAYS)
+    payload = json.loads(response.body.decode("utf-8"))
+    articles = payload.get("articles") or []
+    return articles[:_PUBLIC_NEWS_LIMIT]
+
+
+def _stock_news_structured_data(*, canonical_url: str, company_name: str, articles: list[dict]):
+    result = []
+    for article in articles:
         url = article.get("url")
-        if not url:
-          return ""
-        title = escape(article.get("title") or "Untitled article")
-        source = escape(article.get("source") or "Unknown source")
-        published = escape(article.get("publishedAt") or "Recent")
-        description = escape(article.get("description") or "")
-        description_block = f'<p class="muted" style="margin-top:8px;">{description}</p>' if description else ""
-        return f"""
-          <a class="mini-link" href="{escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">
-          <strong>{title}</strong><br />
-          <span class="muted">{source} · {published}</span>
-          {description_block}
-          </a>
-        """
-
-
-      async def _fetch_public_news_articles(ticker: str):
-        response = await get_stock_news(ticker=ticker, days=_PUBLIC_NEWS_DAYS)
-        payload = json.loads(response.body.decode("utf-8"))
-        articles = payload.get("articles") or []
-        return articles[:_PUBLIC_NEWS_LIMIT]
-
-
-      def _stock_news_structured_data(*, canonical_url: str, company_name: str, articles: list[dict]):
-        result = []
-        for article in articles:
-          url = article.get("url")
-          title = article.get("title")
-          if not url or not title:
+        title = article.get("title")
+        if not url or not title:
             continue
-          result.append(
+        result.append(
             {
-              "@context": "https://schema.org",
-              "@type": "NewsArticle",
-              "headline": title,
-              "url": url,
-              "description": article.get("description") or f"Recent market coverage for {company_name} earnings.",
-              "mainEntityOfPage": canonical_url,
-              "publisher": {
-                "@type": "Organization",
-                "name": article.get("source") or "Earnings Analyzer",
-              },
-              "datePublished": article.get("publishedAt"),
+                "@context": "https://schema.org",
+                "@type": "NewsArticle",
+                "headline": title,
+                "url": url,
+                "description": article.get("description") or f"Recent market coverage for {company_name} earnings.",
+                "mainEntityOfPage": canonical_url,
+                "publisher": {
+                    "@type": "Organization",
+                    "name": article.get("source") or "Earnings Analyzer",
+                },
+                "datePublished": article.get("publishedAt"),
             }
-          )
-        return result
+        )
+    return result
 
 def _breadcrumb_structured_data(request: Request, items: list[tuple[str, str]]):
     return {
@@ -813,24 +813,18 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
             <p>Revenue estimate: {_format_currency(primary_event.revenue_estimate)}</p>
             <p>Market cap: {_format_currency(primary_event.market_cap)}</p>
           </section>
-    canonical_url = _absolute_url(request, canonical_path)
           {analysis_blocks}
           <section class=\"card\">
             <div class=\"section-header\">
               <h2>Recent earnings history</h2>
               <a href=\"{primary_calendar_href}\">Browse the calendar week</a>
             </div>
-            canonical_url=canonical_url,
+            <table class=\"table\">
               <thead>
                 <tr>
                   <th>Date</th>
                   <th>Quarter</th>
                   <th>Report window</th>
-        *_stock_news_structured_data(
-            canonical_url=canonical_url,
-            company_name=company_name,
-            articles=news_articles,
-        ),
                   <th>EPS est.</th>
                   <th>Revenue est.</th>
                 </tr>
@@ -857,18 +851,24 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
       </section>
     """
     canonical_path = f"/stocks/{quote(upper)}"
+    canonical_url = _absolute_url(request, canonical_path)
     structured_data = [
         _breadcrumb_structured_data(request, [("Home", "/"), ("Calendar", "/calendar"), (upper, canonical_path)]),
         *_stock_structured_data(
             request,
             title=title,
             description=description,
-            canonical_url=_absolute_url(request, canonical_path),
+        canonical_url=canonical_url,
             company_name=company_name,
             ticker=upper,
             primary_event=primary_event,
             analysis=analysis,
         ),
+      *_stock_news_structured_data(
+        canonical_url=canonical_url,
+        company_name=company_name,
+        articles=news_articles,
+      ),
     ]
     return _page_shell(
         request=request,
