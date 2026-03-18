@@ -15,7 +15,9 @@ async function authFetch(url, options = {}) {
 
 export async function fetchWeekEarnings(dateStr = null) {
   const params = dateStr ? `?date=${dateStr}` : '';
-  const res = await fetch(`${API_BASE}/calendar/week${params}`);
+  const res = await fetch(`${API_BASE}/calendar/week${params}`, {
+    cache: 'no-store',
+  });
   if (!res.ok) throw new Error(`Failed to fetch earnings: ${res.status}`);
   return res.json();
 }
@@ -128,7 +130,9 @@ export async function fetchSparklines(tickers) {
 }
 
 export async function fetchHighlights() {
-  const res = await fetch(`${API_BASE}/calendar/highlights`);
+  const res = await fetch(`${API_BASE}/calendar/highlights`, {
+    cache: 'no-store',
+  });
   if (!res.ok) throw new Error(`Failed to fetch highlights: ${res.status}`);
   return res.json();
 }

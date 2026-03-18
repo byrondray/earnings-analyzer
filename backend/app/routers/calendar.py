@@ -151,7 +151,16 @@ async def get_highlights(
     if not refresh:
         cached = await get_cached_highlights()
         if cached:
-            return HighlightsResponse(**cached)
+            try:
+                cached_resp = HighlightsResponse(**cached)
+                if len(cached_resp.this_week.events) > 1:
+                    return cached_resp
+                logger.warning(
+                    "Ignoring sparse cached highlights (this_week events=%d), recomputing",
+                    len(cached_resp.this_week.events),
+                )
+            except Exception:
+                logger.warning("Cached highlights payload invalid; recomputing")
 
     today = date.today()
     anchor = today
