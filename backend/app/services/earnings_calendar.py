@@ -42,10 +42,16 @@ async def fetch_all_earnings_from_alpha_vantage() -> list[dict]:
     async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.get(ALPHA_VANTAGE_BASE, params=params)
         if resp.status_code != 200:
+            logger.warning(
+                "Alpha Vantage request failed with status %d: %s",
+                resp.status_code,
+                resp.text[:200] if resp.text else "no response body",
+            )
             return []
 
         text = resp.text
         if not text or text.startswith("{"):
+            logger.warning("Alpha Vantage returned non-CSV response (likely error or rate limit)")
             return []
 
         reader = csv.DictReader(io.StringIO(text))
@@ -63,6 +69,7 @@ async def fetch_all_earnings_from_alpha_vantage() -> list[dict]:
                 "fiscalDateEnding": row.get("fiscalDateEnding"),
                 "epsEstimated": _safe_float(row.get("estimate")),
             })
+        logger.info("Alpha Vantage returned %d earnings entries", len(results))
         return results
 
 
@@ -304,38 +311,45 @@ async def _sync_alpha_vantage_data(db: AsyncSession):
     from app.services.cache import should_sync_alpha_vantage, mark_alpha_vantage_synced
 
     if not await should_sync_alpha_vantage():
+        logger.debug("Skipping Alpha Vantage sync (cached within TTL)")
         return
 
+    logger.info("Syncing earnings data from Alpha Vantage...")
     try:
         all_data = await fetch_all_earnings_from_alpha_vantage()
         if all_data:
             await upsert_earnings_events(db, all_data)
-            logger.info("Synced %d events from Alpha Vantage", len(all_data))
+            logger.info("Successfully synced %d events from Alpha Vantage", len(all_data))
+        else:
+            logger.warning("Alpha Vantage returned no earnings data")
         await mark_alpha_vantage_synced()
     except Exception as e:
-        logger.warning("Alpha Vantage sync failed: %s", e)
+        logger.error("Alpha Vantage sync failed: %s", e, exc_info=True)
 
 
 async def get_week_earnings(
     db: AsyncSession, target_date: date
 ) -> list[EarningsEvent]:
     monday, friday = week_bounds(target_date)
+    # Include full calendar week (Sunday through Saturday) for earnings data
+    week_start = monday
+    week_end = friday + timedelta(days=2)  # Include Saturday and Sunday
 
     await _sync_alpha_vantage_data(db)
 
     query = select(EarningsEvent).where(
-        EarningsEvent.report_date >= monday,
-        EarningsEvent.report_date <= friday,
+        EarningsEvent.report_date >= week_start,
+        EarningsEvent.report_date <= week_end,
     ).order_by(EarningsEvent.report_date, EarningsEvent.ticker)
     result = await db.execute(query)
     events = list(result.scalars().all())
 
-    if not events and friday < date.today():
+    if not events and week_end < date.today():
         try:
-            nasdaq_data = await _fetch_historical_earnings_nasdaq(monday, friday)
+            nasdaq_data = await _fetch_historical_earnings_nasdaq(week_start, week_end)
             if nasdaq_data:
                 events = await upsert_earnings_events(db, nasdaq_data)
-                logger.info("Fetched %d historical events from Nasdaq for %s", len(events), monday)
+                logger.info("Fetched %d historical events from Nasdaq for %s", len(events), week_start)
         except Exception as e:
             logger.warning("Nasdaq historical fetch failed: %s", e)
 

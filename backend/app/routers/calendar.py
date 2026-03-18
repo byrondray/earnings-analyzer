@@ -93,10 +93,11 @@ async def get_calendar_week(
 
     events = await get_week_earnings(db, target_date)
     monday, friday = week_bounds(target_date)
+    week_end = friday + timedelta(days=2)
 
     return WeekEarningsResponse(
         week_start=monday,
-        week_end=friday,
+        week_end=week_end,
         events=[_to_response(e) for e in events],
     )
 
@@ -111,10 +112,11 @@ async def get_next_week(
     next_week = target_date + timedelta(weeks=1)
     events = await get_week_earnings(db, next_week)
     monday, friday = week_bounds(next_week)
+    week_end = friday + timedelta(days=2)
 
     return WeekEarningsResponse(
         week_start=monday,
-        week_end=friday,
+        week_end=week_end,
         events=[_to_response(e) for e in events],
     )
 
@@ -129,10 +131,11 @@ async def get_prev_week(
     prev_week = target_date - timedelta(weeks=1)
     events = await get_week_earnings(db, prev_week)
     monday, friday = week_bounds(prev_week)
+    week_end = friday + timedelta(days=2)
 
     return WeekEarningsResponse(
         week_start=monday,
-        week_end=friday,
+        week_end=week_end,
         events=[_to_response(e) for e in events],
     )
 
