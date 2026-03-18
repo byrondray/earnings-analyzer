@@ -257,11 +257,11 @@ async def should_sync_alpha_vantage() -> bool:
         return True
 
 
-async def mark_alpha_vantage_synced():
+async def mark_alpha_vantage_synced(ttl: int | None = None):
     r = await get_redis()
     if r is None:
         return
     try:
-        await r.setex(_AV_SYNC_KEY, AV_SYNC_TTL, "1")
+        await r.setex(_AV_SYNC_KEY, ttl or AV_SYNC_TTL, "1")
     except Exception:
         pass

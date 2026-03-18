@@ -320,9 +320,10 @@ async def _sync_alpha_vantage_data(db: AsyncSession):
         if all_data:
             await upsert_earnings_events(db, all_data)
             logger.info("Successfully synced %d events from Alpha Vantage", len(all_data))
+            await mark_alpha_vantage_synced()
         else:
             logger.warning("Alpha Vantage returned no earnings data")
-        await mark_alpha_vantage_synced()
+            await mark_alpha_vantage_synced(ttl=300)
     except Exception as e:
         logger.error("Alpha Vantage sync failed: %s", e, exc_info=True)
 
@@ -343,6 +344,26 @@ async def get_week_earnings(
     ).order_by(EarningsEvent.report_date, EarningsEvent.ticker)
     result = await db.execute(query)
     events = list(result.scalars().all())
+
+    is_current_week = week_start <= date.today() <= week_end
+    if is_current_week and len(events) <= 1:
+        logger.warning(
+            "Current week has sparse earnings data (%d events), trying Nasdaq fallback",
+            len(events),
+        )
+        try:
+            nasdaq_data = await _fetch_historical_earnings_nasdaq(week_start, week_end)
+            if nasdaq_data:
+                await upsert_earnings_events(db, nasdaq_data)
+                result = await db.execute(query)
+                events = list(result.scalars().all())
+                logger.info(
+                    "Nasdaq fallback upserted %d rows; current week now has %d events",
+                    len(nasdaq_data),
+                    len(events),
+                )
+        except Exception as e:
+            logger.warning("Nasdaq current-week fallback failed: %s", e)
 
     if not events and week_end < date.today():
         try:

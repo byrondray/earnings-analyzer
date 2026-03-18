@@ -272,28 +272,3 @@ async def _fetch_sparkline_yahoo(ticker: str) -> list[float]:
     except Exception:
         logger.exception("All sparkline sources failed for %s", ticker)
         return []
-
-
-    @router.get("/debug/force-sync")
-    async def debug_force_sync(db: AsyncSession = Depends(get_db)):
-        """Debug endpoint: Force clear cache and re-sync earnings data."""
-        from app.services.cache import get_redis
-        from app.services.earnings_calendar import _sync_alpha_vantage_data
-    
-        # Clear sync cache to force refresh
-        r = await get_redis()
-        if r:
-            try:
-                await r.delete("earnings:av_last_sync")
-                logger.info("Cleared earnings:av_last_sync cache")
-            except Exception as e:
-                logger.error("Failed to clear cache: %s", e)
-    
-        # Force immediate sync
-        try:
-            await _sync_alpha_vantage_data(db)
-            logger.info("Forced sync completed")
-            return {"status": "success", "message": "Sync forced and cache cleared"}
-        except Exception as e:
-            logger.error("Force sync failed: %s", e)
-            return {"status": "error", "message": str(e)}
