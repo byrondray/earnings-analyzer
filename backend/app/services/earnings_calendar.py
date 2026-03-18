@@ -295,9 +295,11 @@ async def upsert_earnings_events(
     await db.execute(stmt)
     await db.commit()
 
+    min_report_date = min(r["report_date"] for r in rows)
+    max_report_date = max(r["report_date"] for r in rows)
     query = select(EarningsEvent).where(
-        EarningsEvent.report_date >= rows[0]["report_date"],
-        EarningsEvent.report_date <= rows[-1]["report_date"],
+        EarningsEvent.report_date >= min_report_date,
+        EarningsEvent.report_date <= max_report_date,
     )
     result = await db.execute(query)
     return list(result.scalars().all())
