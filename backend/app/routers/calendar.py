@@ -181,6 +181,23 @@ async def get_highlights(
     last_events = await get_week_earnings(db, last_mon)
     this_events = await get_week_earnings(db, this_mon)
 
+    if not last_events:
+        for weeks_back in range(2, 9):
+            candidate_mon, candidate_fri = week_bounds(anchor - timedelta(weeks=weeks_back))
+            candidate_events = await get_week_earnings(db, candidate_mon)
+            if candidate_events:
+                last_mon = candidate_mon
+                last_fri = candidate_fri
+                last_sun = candidate_fri + timedelta(days=2)
+                last_events = candidate_events
+                logger.info(
+                    "Last week had no events; using nearest prior week with data: %s..%s (%d events)",
+                    last_mon,
+                    last_sun,
+                    len(last_events),
+                )
+                break
+
     last_top = sorted(
         last_events, key=lambda e: -(e.market_cap or 0)
     )[:_HIGHLIGHTS_LIMIT]
