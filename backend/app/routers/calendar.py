@@ -183,9 +183,10 @@ async def get_highlights(
         this_events = await get_week_earnings(db, this_mon)
 
         if not last_events:
+            recent_cutoff = this_mon - timedelta(days=1)
             recent_query = (
                 select(EarningsEvent)
-                .where(EarningsEvent.report_date <= today)
+                .where(EarningsEvent.report_date <= recent_cutoff)
                 .order_by(
                     EarningsEvent.report_date.desc(),
                     EarningsEvent.market_cap.desc(),

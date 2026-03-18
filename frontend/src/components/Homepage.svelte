@@ -160,7 +160,11 @@
                     <span class="font-bold text-base text-accent-green">{event.ticker}</span>
                     <FavoriteButton ticker={event.ticker} companyName={event.company_name} isFavorited={favorites.has(event.ticker)} {onFavoriteChange} {user} />
                   </div>
+                  {#if hasReported(event)}
                     <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-green/15 text-accent-green uppercase">Reported</span>
+                  {:else}
+                    <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-gold/15 text-accent-gold uppercase">Upcoming</span>
+                  {/if}
                 </div>
                 <div class="text-xs text-text-muted truncate">{event.company_name}</div>
                 <div class="text-xs text-text-muted">{formatDate(event.report_date)}</div>
