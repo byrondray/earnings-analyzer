@@ -14,7 +14,13 @@ from app.services.cache import (
     get_cached_highlights, set_cached_highlights,
     get_cached_sparkline, set_cached_sparkline,
 )
-from app.services.earnings_calendar import get_week_earnings, search_ticker, week_bounds
+from app.services.earnings_calendar import (
+    get_week_earnings,
+    search_ticker,
+    week_bounds,
+    _fetch_historical_earnings_nasdaq,
+    _fetch_historical_earnings_fmp,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -245,6 +251,28 @@ async def get_sparklines(tickers: list[str] = Query(..., alias="t")):
                 await set_cached_sparkline(t, prices)
 
     return JSONResponse(result)
+
+
+@router.get("/debug/source-check")
+async def debug_source_check(
+    target_date: date = Query(default=None, alias="date"),
+):
+    if target_date is None:
+        target_date = date.today()
+    week_start, week_end_base = week_bounds(target_date)
+    week_end = week_end_base + timedelta(days=2)
+
+    nasdaq_rows = await _fetch_historical_earnings_nasdaq(week_start, week_end)
+    fmp_rows = await _fetch_historical_earnings_fmp(week_start, week_end)
+
+    return JSONResponse({
+        "week_start": week_start.isoformat(),
+        "week_end": week_end.isoformat(),
+        "nasdaq_count": len(nasdaq_rows),
+        "fmp_count": len(fmp_rows),
+        "nasdaq_sample": [r.get("symbol") for r in nasdaq_rows[:5]],
+        "fmp_sample": [r.get("symbol") for r in fmp_rows[:5]],
+    })
 
 
 async def _fetch_sparkline_yahoo(ticker: str) -> list[float]:
