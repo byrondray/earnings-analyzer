@@ -262,6 +262,12 @@
     return Number.isInteger(count) ? count : citations.length;
   });
 
+  let reportDatePassedButUnconfirmed = $derived.by(() => {
+    if (analysis?.has_reported !== false || !earningsEvent?.report_date) return false;
+    const today = new Date().toISOString().split('T')[0];
+    return earningsEvent.report_date < today;
+  });
+
   let qualityInsights = $derived.by(() => {
     const messages = qualityFlags.map(explainQualityFlag);
     return [...new Set(messages)].slice(0, 3);
@@ -598,7 +604,11 @@
 
         {#if analysis.has_reported === false}
           <div class="bg-accent-gold/10 border border-accent-gold/30 rounded-2xl p-4">
-            <p class="text-sm text-accent-gold">⏳ This company has not reported earnings yet.{#if earningsEvent} Earnings are scheduled for <strong>{new Date(earningsEvent.report_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>.{/if} Estimates and sentiment are based on pre-report market expectations.</p>
+            {#if reportDatePassedButUnconfirmed}
+              <p class="text-sm text-accent-gold">⚠️ The scheduled earnings date has passed{#if earningsEvent} (<strong>{new Date(earningsEvent.report_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>){/if}, but the latest results could not be verified from reliable sources yet. Estimates and sentiment may still reflect pre-report expectations.</p>
+            {:else}
+              <p class="text-sm text-accent-gold">⏳ This company has not reported earnings yet.{#if earningsEvent} Earnings are scheduled for <strong>{new Date(earningsEvent.report_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>.{/if} Estimates and sentiment are based on pre-report market expectations.</p>
+            {/if}
           </div>
         {/if}
 
