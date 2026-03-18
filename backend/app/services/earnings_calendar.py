@@ -79,6 +79,11 @@ NASDAQ_HEADERS = {
     "User-Agent": "Mozilla/5.0",
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
+    "Cache-Control": "no-cache",
+    "Pragma": "no-cache",
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-site",
     "Origin": "https://www.nasdaq.com",
     "Referer": "https://www.nasdaq.com/",
 }
@@ -127,7 +132,7 @@ async def _fetch_historical_earnings_nasdaq(
     start: date, end: date
 ) -> list[dict]:
     results = []
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, http2=True) as client:
         current = start
         while current <= end:
             if current.weekday() >= 5:
@@ -138,7 +143,11 @@ async def _fetch_historical_earnings_nasdaq(
                 try:
                     resp = await client.get(
                         NASDAQ_EARNINGS_URL,
-                        params={"date": current.isoformat()},
+                        params={
+                            "date": current.isoformat(),
+                            "offset": 0,
+                            "limit": 1000,
+                        },
                         headers=NASDAQ_HEADERS,
                     )
                     if resp.status_code == 200:
