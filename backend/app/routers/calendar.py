@@ -209,7 +209,7 @@ async def get_highlights(
             existing = {(e.ticker, e.report_date) for e in last_events}
             backfill_query = (
                 select(EarningsEvent)
-                .where(EarningsEvent.report_date <= today)
+                .where(EarningsEvent.report_date <= last_sun)
                 .order_by(
                     EarningsEvent.report_date.desc(),
                     EarningsEvent.market_cap.desc(),
