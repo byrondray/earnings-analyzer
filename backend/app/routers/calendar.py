@@ -3,14 +3,13 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 import httpx
 
 from app.config import get_settings
 from app.db.database import get_db
-from app.db.models import EarningsEvent, ReportTime
+from app.db.models import ReportTime
 from app.services.cache import (
     get_cached_highlights, set_cached_highlights,
     get_cached_sparkline, set_cached_sparkline,
@@ -168,12 +167,6 @@ async def get_highlights(
                 )
             except Exception:
                 logger.warning("Cached highlights payload invalid; recomputing")
-    def _mcap_value(value: object) -> float:
-        try:
-            return float(value or 0)
-        except Exception:
-            return 0.0
-
     try:
         today = date.today()
         anchor = today
@@ -188,50 +181,14 @@ async def get_highlights(
         last_events = await get_week_earnings(db, last_mon)
         this_events = await get_week_earnings(db, this_mon)
 
-        if not last_events:
-            for weeks_back in range(2, 9):
-                candidate_mon, candidate_fri = week_bounds(anchor - timedelta(weeks=weeks_back))
-                candidate_events = await get_week_earnings(db, candidate_mon)
-                if candidate_events:
-                    last_mon = candidate_mon
-                    last_fri = candidate_fri
-                    last_sun = candidate_fri + timedelta(days=2)
-                    last_events = candidate_events
-                    logger.info(
-                        "Last week had no events; using nearest prior week with data: %s..%s (%d events)",
-                        last_mon,
-                        last_sun,
-                        len(last_events),
-                    )
-                    break
-
-        if len(last_events) < _HIGHLIGHTS_LIMIT:
-            existing = {(e.ticker, e.report_date) for e in last_events}
-            backfill_query = (
-                select(EarningsEvent)
-                .where(EarningsEvent.report_date <= last_sun)
-                .order_by(
-                    EarningsEvent.report_date.desc(),
-                    EarningsEvent.market_cap.desc(),
-                    EarningsEvent.ticker,
-                )
-                .limit(250)
-            )
-            backfill_result = await db.execute(backfill_query)
-            for candidate in backfill_result.scalars().all():
-                key = (candidate.ticker, candidate.report_date)
-                if key in existing:
-                    continue
-                last_events.append(candidate)
-                existing.add(key)
-                if len(last_events) >= _HIGHLIGHTS_LIMIT:
-                    break
+        # Strict correctness: do not backfill from other weeks.
+        # If the exact prior week has no reliable data, return an empty list.
 
         last_top = sorted(
-            last_events, key=lambda e: (-_mcap_value(e.market_cap), e.ticker)
+            last_events, key=lambda e: (-(e.market_cap or 0), e.ticker)
         )[:_HIGHLIGHTS_LIMIT]
         this_top = sorted(
-            this_events, key=lambda e: (-_mcap_value(e.market_cap), e.ticker)
+            this_events, key=lambda e: (-(e.market_cap or 0), e.ticker)
         )[:_HIGHLIGHTS_LIMIT]
 
         logger.info(

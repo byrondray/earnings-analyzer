@@ -160,7 +160,7 @@ async def set_cached_analysis_redis(ticker: str, quarter: str, analysis: dict):
         pass
 
 
-_HIGHLIGHTS_KEY = "earnings:highlights:v2"
+_HIGHLIGHTS_KEY = "earnings:highlights:v3"
 
 
 async def get_cached_highlights() -> dict | None:
