@@ -186,14 +186,14 @@ async def _fetch_historical_earnings_nasdaq(
 
 async def _fetch_historical_earnings_fmp(start: date, end: date) -> list[dict]:
     settings = get_settings()
-    if not settings.FMP_API_KEY:
-        return []
-
     params = {
         "from": start.isoformat(),
         "to": end.isoformat(),
-        "apikey": settings.FMP_API_KEY,
     }
+    if settings.FMP_API_KEY:
+        params["apikey"] = settings.FMP_API_KEY
+    else:
+        params["apikey"] = "demo"
     try:
         async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             resp = await client.get(FMP_HISTORICAL_EARNINGS_URL, params=params)
