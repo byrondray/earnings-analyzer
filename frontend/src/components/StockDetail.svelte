@@ -49,7 +49,7 @@
     loadingAnalysis = true;
     analysisError = null;
     analysisStatus = 'Checking for cached analysis...';
-    const quarter = normalizeQuarter(selectedQuarter) || guessQuarter();
+    const quarter = resolveTargetQuarter();
     try {
       let cached = await getAnalysis(ticker, quarter);
       if (cached) {
@@ -85,6 +85,10 @@
     }
   }
 
+  function resolveTargetQuarter() {
+    return normalizeQuarter(selectedQuarter) || quarterFromDate(selectedReportDate) || guessQuarter();
+  }
+
   function normalizeQuarter(value) {
     if (typeof value !== 'string') return null;
     const trimmed = value.trim();
@@ -106,6 +110,19 @@
     return null;
   }
 
+  function quarterFromDate(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const parsed = new Date(`${trimmed}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return null;
+
+    const month = parsed.getMonth() + 1;
+    const q = Math.ceil(month / 3);
+    return `Q${q}-${parsed.getFullYear()}`;
+  }
+
   async function loadNews() {
     loadingNews = true;
     try {
@@ -124,12 +141,14 @@
     try {
       const data = await searchStock(ticker);
       if (data?.events?.length) {
+        const targetQuarter = resolveTargetQuarter();
+
         if (selectedReportDate) {
           earningsEvent = data.events.find((e) => e.report_date === selectedReportDate) || null;
         }
 
-        if (!earningsEvent && selectedQuarter) {
-          const quarterEvents = data.events.filter((e) => e.fiscal_quarter === selectedQuarter);
+        if (!earningsEvent && targetQuarter) {
+          const quarterEvents = data.events.filter((e) => normalizeQuarter(e.fiscal_quarter) === targetQuarter);
           if (quarterEvents.length > 0) {
             earningsEvent = quarterEvents.reduce((a, b) =>
               a.report_date > b.report_date ? a : b
