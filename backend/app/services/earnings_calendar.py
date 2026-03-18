@@ -13,6 +13,7 @@ from app.config import get_settings
 from app.db.models import EarningsEvent, ReportTime
 
 ALPHA_VANTAGE_BASE = "https://www.alphavantage.co/query"
+FMP_HISTORICAL_EARNINGS_URL = "https://financialmodelingprep.com/api/v3/historical/earning_calendar"
 
 
 def week_bounds(d: date) -> tuple[date, date]:
@@ -181,6 +182,67 @@ async def _fetch_historical_earnings_nasdaq(
         len(results),
     )
     return results
+
+
+async def _fetch_historical_earnings_fmp(start: date, end: date) -> list[dict]:
+    settings = get_settings()
+    if not settings.FMP_API_KEY:
+        return []
+
+    params = {
+        "from": start.isoformat(),
+        "to": end.isoformat(),
+        "apikey": settings.FMP_API_KEY,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            resp = await client.get(FMP_HISTORICAL_EARNINGS_URL, params=params)
+        if resp.status_code != 200:
+            logger.warning("FMP historical earnings fetch failed with status %d", resp.status_code)
+            return []
+
+        payload = resp.json()
+        if not isinstance(payload, list):
+            logger.warning("FMP historical earnings response was not a list")
+            return []
+
+        results = []
+        for row in payload:
+            symbol = (row.get("symbol") or "").strip()
+            report_date = (row.get("date") or "").strip()
+            if not symbol or not report_date:
+                continue
+            try:
+                dt = date.fromisoformat(report_date)
+            except ValueError:
+                continue
+            if dt < start or dt > end:
+                continue
+
+            company_name = (
+                row.get("company")
+                or row.get("companyName")
+                or symbol
+            )
+            results.append({
+                "symbol": symbol,
+                "companyName": company_name,
+                "date": dt.isoformat(),
+                "time": row.get("time") or "",
+                "fiscalDateEnding": row.get("fiscalDateEnding"),
+                "epsEstimated": _safe_float(str(row.get("epsEstimated"))) if row.get("epsEstimated") is not None else None,
+            })
+
+        logger.info(
+            "FMP historical fetch completed for %s..%s with %d rows",
+            start,
+            end,
+            len(results),
+        )
+        return results
+    except Exception as e:
+        logger.warning("FMP historical fetch failed for %s..%s: %s", start, end, e)
+        return []
 
 
 def _safe_float(val: str | None) -> float | None:
@@ -406,6 +468,10 @@ async def get_week_earnings(
                     week_start,
                     week_end,
                 )
+                fmp_data = await _fetch_historical_earnings_fmp(week_start, week_end)
+                if fmp_data:
+                    events = await upsert_earnings_events(db, fmp_data)
+                    logger.info("Fetched %d historical events from FMP for %s", len(events), week_start)
         except Exception as e:
             logger.warning("Nasdaq historical fetch failed: %s", e)
 
