@@ -91,7 +91,14 @@
             <button
               class="flex items-center gap-4 p-3 text-left text-text-primary bg-transparent border-none cursor-pointer hover:bg-surface-elevated/50 transition-all duration-200 font-[inherit]"
               onclick={() => {
-                onShowAnalysis({ detail: { ticker: event.ticker, company_name: event.company_name } });
+                onShowAnalysis({
+                  detail: {
+                    ticker: event.ticker,
+                    company_name: event.company_name,
+                    fiscal_quarter: event.fiscal_quarter,
+                    report_date: event.report_date,
+                  },
+                });
                 clearSearch();
               }}
             >

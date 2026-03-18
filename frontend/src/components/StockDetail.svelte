@@ -3,7 +3,16 @@
   import { formatLargeNumber, formatPercent, getSentimentColor, getSentimentEmoji, formatNewsDate } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
 
-  let { ticker, companyName = '', onBack, user = null, isFavorited = false, onFavoriteChange } = $props();
+  let {
+    ticker,
+    companyName = '',
+    selectedQuarter = null,
+    selectedReportDate = null,
+    onBack,
+    user = null,
+    isFavorited = false,
+    onFavoriteChange,
+  } = $props();
 
   let analysis = $state(null);
   let news = $state(null);
@@ -40,13 +49,14 @@
     loadingAnalysis = true;
     analysisError = null;
     analysisStatus = 'Checking for cached analysis...';
+    const quarter = selectedQuarter || guessQuarter();
     try {
-      let cached = await getAnalysis(ticker);
+      let cached = await getAnalysis(ticker, quarter);
       if (cached) {
         analysis = cached;
         if (cached.has_reported === false && cached.stale) {
           analysisStatus = 'Refreshing analysis...';
-          triggerAnalysis(ticker, guessQuarter(), (msg) => {
+          triggerAnalysis(ticker, quarter, (msg) => {
             analysisStatus = msg;
           }).then((result) => {
             analysis = result;
@@ -63,7 +73,7 @@
         return;
       }
       analysisStatus = 'Starting analysis...';
-      const result = await triggerAnalysis(ticker, guessQuarter(), (msg) => {
+      const result = await triggerAnalysis(ticker, quarter, (msg) => {
         analysisStatus = msg;
       });
       analysis = result;
@@ -93,9 +103,24 @@
     try {
       const data = await searchStock(ticker);
       if (data?.events?.length) {
-        earningsEvent = data.events.reduce((a, b) =>
-          a.report_date > b.report_date ? a : b
-        );
+        if (selectedReportDate) {
+          earningsEvent = data.events.find((e) => e.report_date === selectedReportDate) || null;
+        }
+
+        if (!earningsEvent && selectedQuarter) {
+          const quarterEvents = data.events.filter((e) => e.fiscal_quarter === selectedQuarter);
+          if (quarterEvents.length > 0) {
+            earningsEvent = quarterEvents.reduce((a, b) =>
+              a.report_date > b.report_date ? a : b
+            );
+          }
+        }
+
+        if (!earningsEvent) {
+          earningsEvent = data.events.reduce((a, b) =>
+            a.report_date > b.report_date ? a : b
+          );
+        }
       }
     } catch {
       earningsEvent = null;

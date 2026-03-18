@@ -53,13 +53,19 @@ async def analyze_ticker(
 @router.get("/{ticker}")
 async def get_analysis(
     ticker: str,
+    quarter: str | None = Query(default=None, description="Fiscal quarter, e.g. Q4-2025"),
     db: AsyncSession = Depends(get_db),
 ):
     clean_ticker = _validate_ticker(ticker)
-    result = await get_cached_analysis(db, clean_ticker)
+    clean_quarter = _validate_quarter(quarter) if quarter is not None else None
+    result = await get_cached_analysis(db, clean_ticker, clean_quarter)
     if result is None:
         raise HTTPException(
             status_code=404,
-            detail=f"No analysis found for {clean_ticker}",
+            detail=(
+                f"No analysis found for {clean_ticker} {clean_quarter}"
+                if clean_quarter
+                else f"No analysis found for {clean_ticker}"
+            ),
         )
     return result

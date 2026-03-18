@@ -12,6 +12,8 @@
   let currentView = $state(getInitialView());
   let stockTicker = $state(getStockFromUrl());
   let stockCompanyName = $state('');
+  let selectedQuarter = $state(null);
+  let selectedReportDate = $state(null);
 
   let user = $state(null);
   let authReady = $state(false);
@@ -69,9 +71,11 @@
     }
   }
 
-  function navigateToStock(ticker, companyName = '') {
+  function navigateToStock(ticker, companyName = '', quarter = null, reportDate = null) {
     stockTicker = ticker.toUpperCase();
     stockCompanyName = companyName;
+    selectedQuarter = quarter;
+    selectedReportDate = reportDate;
     window.history.pushState({}, '', `#/stock/${encodeURIComponent(stockTicker)}`);
     currentView = 'stock';
     window.scrollTo(0, 0);
@@ -79,7 +83,12 @@
 
   function handleShowAnalysis(event) {
     const detail = event.detail || event;
-    navigateToStock(detail.ticker, detail.company_name || '');
+    navigateToStock(
+      detail.ticker,
+      detail.company_name || '',
+      detail.fiscal_quarter || null,
+      detail.report_date || null,
+    );
   }
 
   function handleError(msg) {
@@ -158,6 +167,8 @@
       <StockDetail
         ticker={stockTicker}
         companyName={stockCompanyName}
+        selectedQuarter={selectedQuarter}
+        selectedReportDate={selectedReportDate}
         onBack={() => window.history.back()}
         {user}
         isFavorited={favorites.has(stockTicker)}

@@ -26,12 +26,25 @@ async def run_analysis_streaming(
 
     event_query = (
         select(EarningsEvent)
-        .where(EarningsEvent.ticker == ticker.upper())
+        .where(
+            EarningsEvent.ticker == ticker.upper(),
+            EarningsEvent.fiscal_quarter == quarter,
+        )
         .order_by(EarningsEvent.report_date.desc())
         .limit(1)
     )
     event_result = await db.execute(event_query)
     event = event_result.scalar_one_or_none()
+
+    if not event:
+        fallback_query = (
+            select(EarningsEvent)
+            .where(EarningsEvent.ticker == ticker.upper())
+            .order_by(EarningsEvent.report_date.desc())
+            .limit(1)
+        )
+        fallback_result = await db.execute(fallback_query)
+        event = fallback_result.scalar_one_or_none()
 
     event_context = None
     company_name = None
@@ -91,15 +104,19 @@ async def run_analysis_streaming(
 
 
 async def get_cached_analysis(
-    db: AsyncSession, ticker: str
+    db: AsyncSession, ticker: str, quarter: str | None = None
 ) -> dict | None:
     query = (
         select(EarningsAnalysis)
         .join(EarningsEvent)
         .where(EarningsEvent.ticker == ticker.upper())
-        .order_by(EarningsAnalysis.analyzed_at.desc())
-        .limit(1)
     )
+
+    if quarter is not None:
+        query = query.where(EarningsEvent.fiscal_quarter == quarter)
+
+    query = query.order_by(EarningsAnalysis.analyzed_at.desc()).limit(1)
+
     result = await db.execute(query)
     analysis = result.scalar_one_or_none()
 

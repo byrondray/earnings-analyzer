@@ -86,6 +86,36 @@ class TestGetAnalysisEndpoint:
         assert data["ticker"] == "AAPL"
 
     @pytest.mark.asyncio
+    async def test_get_cached_with_quarter_forwards_param(self, async_client, sample_analysis_result):
+        cached = {
+            **sample_analysis_result,
+            "id": 1,
+            "earnings_event_id": 1,
+            "ticker": "AAPL",
+            "quarter": "Q4-2025",
+            "raw_analysis": sample_analysis_result,
+            "analyzed_at": "2026-02-16T10:00:00",
+        }
+        with patch(
+            "app.routers.analysis.get_cached_analysis",
+            new_callable=AsyncMock,
+            return_value=cached,
+        ) as mocked_get_cached:
+            response = await async_client.get("/api/analysis/AAPL", params={"quarter": "Q4-2025"})
+
+        assert response.status_code == 200
+        mocked_get_cached.assert_awaited_once_with(
+            mocked_get_cached.await_args.args[0],
+            "AAPL",
+            "Q4-2025",
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_cached_rejects_invalid_quarter(self, async_client):
+        response = await async_client.get("/api/analysis/AAPL", params={"quarter": "2025Q4"})
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
     async def test_get_cached_returns_404_when_missing(self, async_client):
         with patch(
             "app.routers.analysis.get_cached_analysis",

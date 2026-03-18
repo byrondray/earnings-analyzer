@@ -98,8 +98,9 @@ export async function triggerAnalysis(ticker, quarter, onStatus) {
   return result;
 }
 
-export async function getAnalysis(ticker) {
-  const res = await fetch(`${API_BASE}/analysis/${ticker}`);
+export async function getAnalysis(ticker, quarter = null) {
+  const params = quarter ? `?quarter=${encodeURIComponent(quarter)}` : '';
+  const res = await fetch(`${API_BASE}/analysis/${ticker}${params}`);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Failed to get analysis: ${res.status}`);
   return res.json();

@@ -52,7 +52,14 @@
   }
 
   function handleCardClick(event) {
-    onShowAnalysis({ detail: { ticker: event.ticker, company_name: event.company_name } });
+    onShowAnalysis({
+      detail: {
+        ticker: event.ticker,
+        company_name: event.company_name,
+        fiscal_quarter: event.fiscal_quarter,
+        report_date: event.report_date,
+      },
+    });
   }
 
   function findEventByTicker(ticker) {
