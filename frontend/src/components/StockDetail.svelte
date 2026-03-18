@@ -40,9 +40,9 @@
   });
 
   async function loadAll() {
-    loadAnalysis();
     loadNews();
-    loadEarningsEvent();
+    await loadEarningsEvent();
+    loadAnalysis();
   }
 
   async function loadAnalysis() {
@@ -86,7 +86,17 @@
   }
 
   function resolveTargetQuarter() {
-    return normalizeQuarter(selectedQuarter) || quarterFromDate(selectedReportDate) || guessQuarter();
+    return (
+      normalizeQuarter(selectedQuarter)
+      || quarterFromDate(selectedReportDate)
+      || normalizeQuarter(earningsEvent?.fiscal_quarter)
+      || quarterFromDate(earningsEvent?.report_date)
+      || guessQuarter()
+    );
+  }
+
+  function resolveTargetQuarterFromSelection() {
+    return normalizeQuarter(selectedQuarter) || quarterFromDate(selectedReportDate);
   }
 
   function normalizeQuarter(value) {
@@ -141,7 +151,8 @@
     try {
       const data = await searchStock(ticker);
       if (data?.events?.length) {
-        const targetQuarter = resolveTargetQuarter();
+        const today = new Date().toISOString().split('T')[0];
+        const targetQuarter = resolveTargetQuarterFromSelection();
 
         if (selectedReportDate) {
           earningsEvent = data.events.find((e) => e.report_date === selectedReportDate) || null;
@@ -157,9 +168,16 @@
         }
 
         if (!earningsEvent) {
-          earningsEvent = data.events.reduce((a, b) =>
-            a.report_date > b.report_date ? a : b
-          );
+          const pastEvents = data.events.filter((e) => e.report_date < today);
+          if (pastEvents.length > 0) {
+            earningsEvent = pastEvents.reduce((a, b) =>
+              a.report_date > b.report_date ? a : b
+            );
+          } else {
+            earningsEvent = data.events.reduce((a, b) =>
+              a.report_date < b.report_date ? a : b
+            );
+          }
         }
       }
     } catch {
