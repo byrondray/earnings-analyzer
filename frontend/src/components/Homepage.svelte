@@ -132,7 +132,7 @@
       <div>
         <div class="flex justify-between items-center mb-4 px-1">
           <div>
-            <h2 class="text-lg font-bold text-text-primary">Last Week's Top Earnings</h2>
+            <h2 class="text-lg font-bold text-text-primary">Recent Top Earnings</h2>
             <p class="text-text-muted text-xs mt-0.5">{formatWeekRange(highlights.last_week.week_start, highlights.last_week.week_end)}</p>
           </div>
           <button
@@ -144,7 +144,7 @@
         </div>
 
         {#if highlights.last_week.events.length === 0}
-          <div class="glass-card-solid rounded-2xl p-8 text-center text-text-muted text-sm">No earnings data available for last week</div>
+          <div class="glass-card-solid rounded-2xl p-8 text-center text-text-muted text-sm">No recent reported earnings available</div>
         {:else}
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
             {#each highlights.last_week.events as event, i}

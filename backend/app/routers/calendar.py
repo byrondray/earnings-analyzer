@@ -3,13 +3,14 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 import httpx
 
 from app.config import get_settings
 from app.db.database import get_db
-from app.db.models import ReportTime
+from app.db.models import EarningsEvent, ReportTime
 from app.services.cache import (
     get_cached_highlights, set_cached_highlights,
     get_cached_sparkline, set_cached_sparkline,
@@ -181,8 +182,39 @@ async def get_highlights(
         last_events = await get_week_earnings(db, last_mon)
         this_events = await get_week_earnings(db, this_mon)
 
-        # Strict correctness: do not backfill from other weeks.
-        # If the exact prior week has no reliable data, return an empty list.
+        if not last_events:
+            recent_query = (
+                select(EarningsEvent)
+                .where(EarningsEvent.report_date <= today)
+                .order_by(
+                    EarningsEvent.report_date.desc(),
+                    EarningsEvent.market_cap.desc(),
+                    EarningsEvent.ticker,
+                )
+                .limit(300)
+            )
+            recent_result = await db.execute(recent_query)
+            recent_events = list(recent_result.scalars().all())
+
+            if recent_events:
+                recent_end = recent_events[0].report_date
+                recent_start = recent_end - timedelta(days=6)
+                window_events = [
+                    e for e in recent_events
+                    if recent_start <= e.report_date <= recent_end
+                ]
+                if len(window_events) < _HIGHLIGHTS_LIMIT:
+                    window_events = recent_events
+
+                last_events = window_events
+                last_mon = recent_start
+                last_sun = recent_end
+                logger.info(
+                    "Last week empty; using recent earnings window %s..%s (%d events)",
+                    last_mon,
+                    last_sun,
+                    len(last_events),
+                )
 
         last_top = sorted(
             last_events, key=lambda e: (-(e.market_cap or 0), e.ticker)
