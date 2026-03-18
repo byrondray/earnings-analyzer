@@ -160,6 +160,8 @@ async def get_highlights(
 
     last_mon, last_fri = week_bounds(anchor - timedelta(weeks=1))
     this_mon, this_fri = week_bounds(anchor)
+    last_sun = last_fri + timedelta(days=2)
+    this_sun = this_fri + timedelta(days=2)
 
     last_events = await get_week_earnings(db, last_mon)
     this_events = await get_week_earnings(db, this_mon)
@@ -180,12 +182,12 @@ async def get_highlights(
     response = HighlightsResponse(
         last_week=HighlightsSection(
             week_start=last_mon,
-            week_end=last_fri,
+            week_end=last_sun,
             events=[_to_response(e) for e in last_top],
         ),
         this_week=HighlightsSection(
             week_start=this_mon,
-            week_end=this_fri,
+            week_end=this_sun,
             events=[_to_response(e) for e in this_top],
         ),
     )
