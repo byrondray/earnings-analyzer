@@ -179,6 +179,36 @@
     return 'Low';
   }
 
+  function qualitySummary(score) {
+    if (score == null) return 'We could not determine confidence for this analysis yet.';
+    if (score >= 0.75) return 'This analysis is well-supported by available sources.';
+    if (score >= 0.5) return 'This analysis is directionally useful, but some figures may be incomplete.';
+    return 'This analysis is preliminary. Treat key numbers as tentative until stronger sources are available.';
+  }
+
+  function formatCompleteness(value) {
+    if (value === 'high') return 'Comprehensive';
+    if (value === 'medium') return 'Partial';
+    if (value === 'low') return 'Limited';
+    return 'Unknown';
+  }
+
+  function explainQualityFlag(flag) {
+    const map = {
+      snippet_only_extraction: 'We only found short snippets, not full reports.',
+      missing_primary_source: 'No official press release or investor-relations source was found.',
+      future_report_date: 'The selected earnings report appears to be in the future.',
+      low_source_count: 'Only a small number of sources were available.',
+      missing_actual_eps: 'Actual EPS has not been reliably confirmed yet.',
+      missing_actual_revenue: 'Actual revenue has not been reliably confirmed yet.',
+      missing_guidance: 'Management guidance was not clearly available.',
+      conflicting_metrics: 'Different sources reported conflicting numbers.',
+      price_reaction_unverified: 'Price reaction could not be verified from trusted sources.',
+    };
+
+    return map[flag] || 'Some data quality limitations were detected.';
+  }
+
   function citationDomain(url) {
     try {
       return new URL(url).hostname.replace(/^www\./, '');
@@ -211,6 +241,11 @@
   let sourceCount = $derived.by(() => {
     const count = analysis?.source_count ?? analysis?.raw_analysis?.source_count;
     return Number.isInteger(count) ? count : citations.length;
+  });
+
+  let qualityInsights = $derived.by(() => {
+    const messages = qualityFlags.map(explainQualityFlag);
+    return [...new Set(messages)].slice(0, 3);
   });
 
   let allNA = $derived(analysis && analysis.eps_estimate == null && analysis.eps_actual == null && analysis.revenue_estimate == null && analysis.revenue_actual == null);
@@ -435,29 +470,34 @@
       {:else if analysis}
         <div class="glass-card-solid rounded-2xl p-5 border border-border-subtle">
           <div class="flex flex-wrap items-center gap-2 mb-3">
-            <span class="text-xs text-text-muted font-bold uppercase tracking-widest">Analysis Quality</span>
+            <span class="text-xs text-text-muted font-bold uppercase tracking-widest">How reliable this analysis is</span>
             <span class="text-xs font-semibold px-2 py-1 rounded-lg border {qualityTone(confidenceScore)}">
               Confidence: {qualityLabel(confidenceScore)}{#if confidenceScore != null} ({(confidenceScore * 100).toFixed(0)}%){/if}
             </span>
             <span class="text-xs font-semibold px-2 py-1 rounded-lg border border-border-subtle bg-surface-primary text-text-muted">
-              Completeness: {dataCompleteness.toUpperCase()}
+              Coverage: {formatCompleteness(dataCompleteness)}
             </span>
             <span class="text-xs font-semibold px-2 py-1 rounded-lg border border-border-subtle bg-surface-primary text-text-muted">
-              Sources: {sourceCount}
+              Sources checked: {sourceCount}
             </span>
           </div>
 
-          {#if qualityFlags.length > 0}
-            <div class="flex flex-wrap gap-2 mb-3">
-              {#each qualityFlags as flag}
-                <span class="text-[0.7rem] px-2 py-1 rounded-md border border-accent-gold/30 bg-accent-gold/10 text-accent-gold">{flag.replaceAll('_', ' ')}</span>
-              {/each}
+          <p class="text-sm text-text-secondary mb-3">{qualitySummary(confidenceScore)}</p>
+
+          {#if qualityInsights.length > 0}
+            <div class="rounded-xl border border-accent-gold/30 bg-accent-gold/8 px-3 py-2 mb-3">
+              <div class="text-xs text-accent-gold font-semibold mb-1">What to keep in mind</div>
+              <ul class="text-xs text-text-secondary flex flex-col gap-1 list-disc pl-4">
+                {#each qualityInsights as insight}
+                  <li>{insight}</li>
+                {/each}
+              </ul>
             </div>
           {/if}
 
           {#if citations.length > 0}
             <details class="text-sm">
-              <summary class="cursor-pointer text-text-secondary hover:text-text-primary transition-colors">View sources</summary>
+              <summary class="cursor-pointer text-text-secondary hover:text-text-primary transition-colors">View sources we used</summary>
               <div class="mt-3 flex flex-col gap-2">
                 {#each citations.slice(0, 3) as citation}
                   <a
