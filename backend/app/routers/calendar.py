@@ -9,7 +9,7 @@ import httpx
 
 from app.config import get_settings
 from app.db.database import get_db
-from app.db.models import ReportTime
+from app.db.models import EarningsEvent, ReportTime
 from app.services.cache import (
     get_cached_highlights, set_cached_highlights,
     get_cached_sparkline, set_cached_sparkline,
@@ -196,6 +196,28 @@ async def get_highlights(
                     last_sun,
                     len(last_events),
                 )
+                break
+
+    if len(last_events) < _HIGHLIGHTS_LIMIT:
+        existing = {(e.ticker, e.report_date) for e in last_events}
+        backfill_query = (
+            select(EarningsEvent)
+            .where(EarningsEvent.report_date <= today)
+            .order_by(
+                EarningsEvent.report_date.desc(),
+                EarningsEvent.market_cap.desc(),
+                EarningsEvent.ticker,
+            )
+            .limit(250)
+        )
+        backfill_result = await db.execute(backfill_query)
+        for candidate in backfill_result.scalars().all():
+            key = (candidate.ticker, candidate.report_date)
+            if key in existing:
+                continue
+            last_events.append(candidate)
+            existing.add(key)
+            if len(last_events) >= _HIGHLIGHTS_LIMIT:
                 break
 
     last_top = sorted(
