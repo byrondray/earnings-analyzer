@@ -60,6 +60,63 @@ ANALYSIS_TOOL = {
                 "type": ["number", "null"],
                 "description": "Stock price change percentage in after-hours or next trading day. Must be null if has_reported is false.",
             },
+            "confidence_score": {
+                "type": "number",
+                "description": "Confidence in extraction quality from 0.0 to 1.0. Lower confidence when metrics are missing or conflicting.",
+            },
+            "data_completeness": {
+                "type": "string",
+                "enum": ["high", "medium", "low"],
+                "description": "How complete the extracted earnings dataset is.",
+            },
+            "source_count": {
+                "type": "integer",
+                "description": "Number of unique sources used to support extracted fields.",
+            },
+            "citations": {
+                "type": "array",
+                "description": "Evidence snippets backing extracted fields.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                        },
+                        "title": {
+                            "type": "string",
+                        },
+                        "excerpt": {
+                            "type": "string",
+                        },
+                        "field_refs": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                            },
+                            "description": "List of output fields supported by this citation, e.g. eps_actual, revenue_actual.",
+                        },
+                    },
+                    "required": ["url", "title", "excerpt", "field_refs"],
+                },
+            },
+            "quality_flags": {
+                "type": "array",
+                "description": "Quality caveats about the analysis extraction.",
+                "items": {
+                    "type": "string",
+                    "enum": [
+                        "missing_primary_source",
+                        "missing_actual_eps",
+                        "missing_actual_revenue",
+                        "missing_guidance",
+                        "conflicting_metrics",
+                        "snippet_only_extraction",
+                        "low_source_count",
+                        "future_report_date",
+                        "price_reaction_unverified",
+                    ],
+                },
+            },
         },
         "required": [
             "has_reported",
@@ -67,6 +124,11 @@ ANALYSIS_TOOL = {
             "revenue_estimate",
             "sentiment",
             "sentiment_score",
+            "confidence_score",
+            "data_completeness",
+            "source_count",
+            "citations",
+            "quality_flags",
         ],
     },
 }
@@ -85,6 +147,10 @@ CRITICAL RULES:
 - NEVER fabricate numbers. Only use figures explicitly stated in the source material.
 - Prioritize data from PRESS RELEASE sources over news articles — press releases contain
   the official numbers from the company.
+- Any non-null numeric output (actuals, estimates, surprises, price reaction) must be
+    supported by at least one citation referencing that field in citations[].field_refs.
+- If evidence is weak or missing, set the uncertain numeric fields to null, lower
+    confidence_score, set data_completeness appropriately, and add quality_flags.
 - If the search results contain insufficient data to extract financial metrics, you MUST
   still provide helpful context in guidance_summary and financial_highlights. Explain what
   data was or wasn't available, summarize whatever you did find, and note the company's
@@ -127,7 +193,10 @@ Formatting rules:
 - EPS in dollars per share
 - Percentages as numbers (3.2 not "3.2%")
 - Guidance summary: concise 1-3 sentences
-- Financial highlights: bullet points with actual numbers"""
+- Financial highlights: bullet points with actual numbers
+- Include citations[] with URL/title/excerpt and field_refs for supported fields
+- Set source_count to the number of unique evidence sources used
+- Set quality_flags whenever data is incomplete, conflicting, snippet-only, or missing primary source"""
 
 
 def _build_event_context(ticker: str, event_context: dict | None) -> str:

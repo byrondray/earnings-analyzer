@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import logging
 
 from sqlalchemy import select
@@ -10,6 +10,182 @@ from app.mcp_server.tools.web_search import search_earnings_report
 from app.mcp_server.tools.analyze import analyze_earnings
 
 logger = logging.getLogger(__name__)
+
+_PRIMARY_SOURCE_HINTS = [
+    "businesswire.com",
+    "prnewswire.com",
+    "globenewswire.com",
+    "sec.gov",
+    "investor",
+    "ir.",
+    "investors.",
+]
+
+
+def _append_quality_flag(analysis: dict, flag: str):
+    flags = analysis.get("quality_flags")
+    if not isinstance(flags, list):
+        flags = []
+    if flag not in flags:
+        flags.append(flag)
+    analysis["quality_flags"] = flags
+
+
+def _coerce_float(value: object) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _clamp_confidence(value: object, fallback: float = 0.5) -> float:
+    parsed = _coerce_float(value)
+    if parsed is None:
+        return fallback
+    return max(0.0, min(1.0, parsed))
+
+
+def _parse_report_date(event_context: dict | None) -> date | None:
+    if not event_context:
+        return None
+    report_date = event_context.get("report_date")
+    if not isinstance(report_date, str):
+        return None
+    try:
+        return date.fromisoformat(report_date[:10])
+    except ValueError:
+        return None
+
+
+def _recompute_surprise(actual: object, estimate: object) -> float | None:
+    actual_num = _coerce_float(actual)
+    estimate_num = _coerce_float(estimate)
+    if actual_num is None or estimate_num is None or estimate_num == 0:
+        return None
+    return round(((actual_num - estimate_num) / abs(estimate_num)) * 100, 2)
+
+
+def _normalize_citations(analysis: dict) -> list[dict]:
+    citations = analysis.get("citations")
+    if not isinstance(citations, list):
+        citations = []
+
+    normalized = []
+    for citation in citations:
+        if not isinstance(citation, dict):
+            continue
+        field_refs = citation.get("field_refs")
+        if not isinstance(field_refs, list):
+            field_refs = []
+
+        normalized.append(
+            {
+                "url": str(citation.get("url", "")).strip(),
+                "title": str(citation.get("title", "")).strip(),
+                "excerpt": str(citation.get("excerpt", "")).strip(),
+                "field_refs": [str(ref).strip() for ref in field_refs if str(ref).strip()],
+            }
+        )
+
+    analysis["citations"] = normalized
+    return normalized
+
+
+def _has_primary_source(citations: list[dict]) -> bool:
+    for citation in citations:
+        url = str(citation.get("url", "")).lower()
+        if any(hint in url for hint in _PRIMARY_SOURCE_HINTS):
+            return True
+    return False
+
+
+def _has_field_citation(citations: list[dict], field_name: str) -> bool:
+    for citation in citations:
+        refs = citation.get("field_refs")
+        if isinstance(refs, list) and field_name in refs:
+            return True
+    return False
+
+
+def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
+    analysis.setdefault("has_reported", True)
+    analysis.setdefault("quality_flags", [])
+
+    citations = _normalize_citations(analysis)
+    if not citations:
+        _append_quality_flag(analysis, "snippet_only_extraction")
+
+    source_count = analysis.get("source_count")
+    try:
+        source_count = int(source_count)
+    except (TypeError, ValueError):
+        source_count = len({c.get("url") for c in citations if c.get("url")})
+        if source_count == 0:
+            source_count = len(citations)
+
+    analysis["source_count"] = max(0, source_count)
+
+    confidence = _clamp_confidence(analysis.get("confidence_score"), 0.5)
+
+    if analysis["source_count"] < 2:
+        _append_quality_flag(analysis, "low_source_count")
+        confidence = min(confidence, 0.55)
+
+    if not _has_primary_source(citations):
+        _append_quality_flag(analysis, "missing_primary_source")
+
+    report_date = _parse_report_date(event_context)
+    if report_date and report_date >= date.today() and analysis.get("has_reported") is True:
+        analysis["has_reported"] = False
+        _append_quality_flag(analysis, "future_report_date")
+
+    if analysis.get("has_reported") is False:
+        analysis["eps_actual"] = None
+        analysis["eps_surprise_pct"] = None
+        analysis["revenue_actual"] = None
+        analysis["revenue_surprise_pct"] = None
+        analysis["price_reaction_pct"] = None
+    else:
+        if analysis.get("eps_actual") is None:
+            _append_quality_flag(analysis, "missing_actual_eps")
+        if analysis.get("revenue_actual") is None:
+            _append_quality_flag(analysis, "missing_actual_revenue")
+
+        if analysis.get("eps_actual") is None and analysis.get("revenue_actual") is None:
+            confidence = min(confidence, 0.45)
+
+        if analysis.get("eps_actual") is not None:
+            analysis["eps_surprise_pct"] = _recompute_surprise(
+                analysis.get("eps_actual"), analysis.get("eps_estimate")
+            )
+
+        if analysis.get("revenue_actual") is not None:
+            analysis["revenue_surprise_pct"] = _recompute_surprise(
+                analysis.get("revenue_actual"), analysis.get("revenue_estimate")
+            )
+
+    guidance_summary = analysis.get("guidance_summary")
+    if not isinstance(guidance_summary, str) or not guidance_summary.strip():
+        _append_quality_flag(analysis, "missing_guidance")
+
+    if analysis.get("price_reaction_pct") is not None and not _has_field_citation(citations, "price_reaction_pct"):
+        _append_quality_flag(analysis, "price_reaction_unverified")
+
+    if not citations:
+        confidence = min(confidence, 0.4)
+
+    analysis["confidence_score"] = _clamp_confidence(confidence, 0.5)
+
+    if analysis["confidence_score"] >= 0.75:
+        analysis["data_completeness"] = "high"
+    elif analysis["confidence_score"] >= 0.5:
+        analysis["data_completeness"] = "medium"
+    else:
+        analysis["data_completeness"] = "low"
+
+    return analysis
 
 
 async def run_analysis_streaming(
@@ -64,6 +240,7 @@ async def run_analysis_streaming(
 
     yield ("status", {"step": "analyze", "message": "Reading articles & analyzing with AI..."})
     analysis = await analyze_earnings(ticker, search_results, event_context=event_context)
+    analysis = _apply_quality_gate(analysis, event_context)
     logger.info("Analysis result for %s %s: has_reported=%s", ticker, quarter, analysis.get("has_reported"))
 
     if "error" in analysis:
@@ -149,6 +326,12 @@ async def get_cached_analysis(
         "sentiment": analysis.sentiment.value if analysis.sentiment else None,
         "sentiment_score": analysis.sentiment_score,
         "price_reaction_pct": analysis.price_reaction_pct,
+        "financial_highlights": analysis.raw_analysis.get("financial_highlights") if isinstance(analysis.raw_analysis, dict) else None,
+        "confidence_score": analysis.raw_analysis.get("confidence_score") if isinstance(analysis.raw_analysis, dict) else None,
+        "data_completeness": analysis.raw_analysis.get("data_completeness") if isinstance(analysis.raw_analysis, dict) else None,
+        "source_count": analysis.raw_analysis.get("source_count") if isinstance(analysis.raw_analysis, dict) else 0,
+        "citations": analysis.raw_analysis.get("citations") if isinstance(analysis.raw_analysis, dict) else [],
+        "quality_flags": analysis.raw_analysis.get("quality_flags") if isinstance(analysis.raw_analysis, dict) else [],
         "raw_analysis": analysis.raw_analysis,
         "analyzed_at": analysis.analyzed_at.isoformat() if analysis.analyzed_at else None,
     }

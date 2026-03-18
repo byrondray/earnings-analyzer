@@ -144,6 +144,54 @@
     return `Q${q}-${now.getFullYear()}`;
   }
 
+  function qualityTone(score) {
+    if (score == null) return 'text-text-muted border-border-subtle bg-surface-primary';
+    if (score >= 0.75) return 'text-accent-green border-accent-green/30 bg-accent-green/10';
+    if (score >= 0.5) return 'text-accent-gold border-accent-gold/30 bg-accent-gold/10';
+    return 'text-red-400 border-red-400/30 bg-red-400/10';
+  }
+
+  function qualityLabel(score) {
+    if (score == null) return 'Unknown';
+    if (score >= 0.75) return 'High';
+    if (score >= 0.5) return 'Medium';
+    return 'Low';
+  }
+
+  function citationDomain(url) {
+    try {
+      return new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  }
+
+  let qualityFlags = $derived.by(() => {
+    const flags = analysis?.quality_flags ?? analysis?.raw_analysis?.quality_flags;
+    return Array.isArray(flags) ? flags : [];
+  });
+
+  let citations = $derived.by(() => {
+    const refs = analysis?.citations ?? analysis?.raw_analysis?.citations;
+    return Array.isArray(refs) ? refs.filter((item) => item && typeof item === 'object') : [];
+  });
+
+  let confidenceScore = $derived.by(() => {
+    const score = analysis?.confidence_score ?? analysis?.raw_analysis?.confidence_score;
+    return typeof score === 'number' ? score : null;
+  });
+
+  let dataCompleteness = $derived.by(() => {
+    const value = analysis?.data_completeness ?? analysis?.raw_analysis?.data_completeness;
+    if (typeof value !== 'string' || value.length === 0) return 'unknown';
+    return value;
+  });
+
+  let sourceCount = $derived.by(() => {
+    const count = analysis?.source_count ?? analysis?.raw_analysis?.source_count;
+    return Number.isInteger(count) ? count : citations.length;
+  });
+
   let allNA = $derived(analysis && analysis.eps_estimate == null && analysis.eps_actual == null && analysis.revenue_estimate == null && analysis.revenue_actual == null);
 
   let chartPath = $derived.by(() => {
@@ -364,6 +412,51 @@
           <button class="mt-3 px-4 py-2 bg-accent-green text-white border-none rounded-xl cursor-pointer text-sm font-semibold hover:brightness-110 transition-all" onclick={loadAnalysis}>Retry Analysis</button>
         </div>
       {:else if analysis}
+        <div class="glass-card-solid rounded-2xl p-5 border border-border-subtle">
+          <div class="flex flex-wrap items-center gap-2 mb-3">
+            <span class="text-xs text-text-muted font-bold uppercase tracking-widest">Analysis Quality</span>
+            <span class="text-xs font-semibold px-2 py-1 rounded-lg border {qualityTone(confidenceScore)}">
+              Confidence: {qualityLabel(confidenceScore)}{#if confidenceScore != null} ({(confidenceScore * 100).toFixed(0)}%){/if}
+            </span>
+            <span class="text-xs font-semibold px-2 py-1 rounded-lg border border-border-subtle bg-surface-primary text-text-muted">
+              Completeness: {dataCompleteness.toUpperCase()}
+            </span>
+            <span class="text-xs font-semibold px-2 py-1 rounded-lg border border-border-subtle bg-surface-primary text-text-muted">
+              Sources: {sourceCount}
+            </span>
+          </div>
+
+          {#if qualityFlags.length > 0}
+            <div class="flex flex-wrap gap-2 mb-3">
+              {#each qualityFlags as flag}
+                <span class="text-[0.7rem] px-2 py-1 rounded-md border border-accent-gold/30 bg-accent-gold/10 text-accent-gold">{flag.replaceAll('_', ' ')}</span>
+              {/each}
+            </div>
+          {/if}
+
+          {#if citations.length > 0}
+            <details class="text-sm">
+              <summary class="cursor-pointer text-text-secondary hover:text-text-primary transition-colors">View sources</summary>
+              <div class="mt-3 flex flex-col gap-2">
+                {#each citations.slice(0, 3) as citation}
+                  <a
+                    href={citation.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="block p-3 rounded-xl border border-border-subtle bg-surface-primary/50 hover:border-accent-green/40 transition-colors no-underline"
+                  >
+                    <div class="text-xs text-accent-green font-semibold">{citationDomain(citation.url)}</div>
+                    <div class="text-sm text-text-primary font-medium mt-0.5">{citation.title || citation.url}</div>
+                    {#if citation.excerpt}
+                      <div class="text-xs text-text-muted mt-1 line-clamp-2">{citation.excerpt}</div>
+                    {/if}
+                  </a>
+                {/each}
+              </div>
+            </details>
+          {/if}
+        </div>
+
         {#if allNA && analysis.has_reported !== false}
           <div class="bg-accent-gold/10 border border-accent-gold/30 rounded-2xl p-5">
             <p class="text-sm text-accent-gold font-semibold mb-1">Limited Data Available</p>

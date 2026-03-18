@@ -75,6 +75,7 @@ def sample_brave_response():
 @pytest.fixture
 def sample_analysis_result():
     return {
+        "has_reported": True,
         "eps_estimate": 2.35,
         "eps_actual": 2.45,
         "eps_surprise_pct": 4.26,
@@ -82,9 +83,22 @@ def sample_analysis_result():
         "revenue_actual": 95400000000,
         "revenue_surprise_pct": 0.53,
         "guidance_summary": "Apple raised guidance for Q1 2026, citing strong iPhone demand and growing services revenue.",
+        "financial_highlights": "• Revenue beat expectations\n• EPS beat expectations",
         "sentiment": "bullish",
         "sentiment_score": 0.85,
         "price_reaction_pct": 3.2,
+        "confidence_score": 0.88,
+        "data_completeness": "high",
+        "source_count": 3,
+        "citations": [
+            {
+                "url": "https://investor.example.com/earnings",
+                "title": "Quarterly Earnings Release",
+                "excerpt": "EPS of $2.45 on revenue of $95.4B",
+                "field_refs": ["eps_actual", "revenue_actual"],
+            }
+        ],
+        "quality_flags": [],
     }
 
 

@@ -87,6 +87,11 @@ class TestAnalysisToolSchema:
             "revenue_estimate",
             "sentiment",
             "sentiment_score",
+            "confidence_score",
+            "data_completeness",
+            "source_count",
+            "citations",
+            "quality_flags",
         ]
         assert set(required) == set(expected)
 
