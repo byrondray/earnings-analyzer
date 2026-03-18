@@ -49,7 +49,7 @@
     loadingAnalysis = true;
     analysisError = null;
     analysisStatus = 'Checking for cached analysis...';
-    const quarter = selectedQuarter || guessQuarter();
+    const quarter = normalizeQuarter(selectedQuarter) || guessQuarter();
     try {
       let cached = await getAnalysis(ticker, quarter);
       if (cached) {
@@ -83,6 +83,27 @@
       loadingAnalysis = false;
       analysisStatus = '';
     }
+  }
+
+  function normalizeQuarter(value) {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const direct = trimmed.toUpperCase().match(/^Q([1-4])[-\s]?(\d{4})$/);
+    if (direct) {
+      return `Q${direct[1]}-${direct[2]}`;
+    }
+
+    const monthQuarter = trimmed.match(/^(Mar|Jun|Sep|Dec)\/(\d{4})$/i);
+    if (monthQuarter) {
+      const month = monthQuarter[1].toLowerCase();
+      const quarterMap = { mar: 'Q1', jun: 'Q2', sep: 'Q3', dec: 'Q4' };
+      const q = quarterMap[month];
+      return q ? `${q}-${monthQuarter[2]}` : null;
+    }
+
+    return null;
   }
 
   async function loadNews() {
