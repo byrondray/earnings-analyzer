@@ -168,88 +168,107 @@ async def get_highlights(
                 )
             except Exception:
                 logger.warning("Cached highlights payload invalid; recomputing")
+    def _mcap_value(value: object) -> float:
+        try:
+            return float(value or 0)
+        except Exception:
+            return 0.0
 
-    today = date.today()
-    anchor = today
-    if anchor.weekday() >= 5:
-        anchor = anchor + timedelta(days=(7 - anchor.weekday()))
+    try:
+        today = date.today()
+        anchor = today
+        if anchor.weekday() >= 5:
+            anchor = anchor + timedelta(days=(7 - anchor.weekday()))
 
-    last_mon, last_fri = week_bounds(anchor - timedelta(weeks=1))
-    this_mon, this_fri = week_bounds(anchor)
-    last_sun = last_fri + timedelta(days=2)
-    this_sun = this_fri + timedelta(days=2)
+        last_mon, last_fri = week_bounds(anchor - timedelta(weeks=1))
+        this_mon, this_fri = week_bounds(anchor)
+        last_sun = last_fri + timedelta(days=2)
+        this_sun = this_fri + timedelta(days=2)
 
-    last_events = await get_week_earnings(db, last_mon)
-    this_events = await get_week_earnings(db, this_mon)
+        last_events = await get_week_earnings(db, last_mon)
+        this_events = await get_week_earnings(db, this_mon)
 
-    if not last_events:
-        for weeks_back in range(2, 9):
-            candidate_mon, candidate_fri = week_bounds(anchor - timedelta(weeks=weeks_back))
-            candidate_events = await get_week_earnings(db, candidate_mon)
-            if candidate_events:
-                last_mon = candidate_mon
-                last_fri = candidate_fri
-                last_sun = candidate_fri + timedelta(days=2)
-                last_events = candidate_events
-                logger.info(
-                    "Last week had no events; using nearest prior week with data: %s..%s (%d events)",
-                    last_mon,
-                    last_sun,
-                    len(last_events),
+        if not last_events:
+            for weeks_back in range(2, 9):
+                candidate_mon, candidate_fri = week_bounds(anchor - timedelta(weeks=weeks_back))
+                candidate_events = await get_week_earnings(db, candidate_mon)
+                if candidate_events:
+                    last_mon = candidate_mon
+                    last_fri = candidate_fri
+                    last_sun = candidate_fri + timedelta(days=2)
+                    last_events = candidate_events
+                    logger.info(
+                        "Last week had no events; using nearest prior week with data: %s..%s (%d events)",
+                        last_mon,
+                        last_sun,
+                        len(last_events),
+                    )
+                    break
+
+        if len(last_events) < _HIGHLIGHTS_LIMIT:
+            existing = {(e.ticker, e.report_date) for e in last_events}
+            backfill_query = (
+                select(EarningsEvent)
+                .where(EarningsEvent.report_date <= today)
+                .order_by(
+                    EarningsEvent.report_date.desc(),
+                    EarningsEvent.market_cap.desc(),
+                    EarningsEvent.ticker,
                 )
-                break
-
-    if len(last_events) < _HIGHLIGHTS_LIMIT:
-        existing = {(e.ticker, e.report_date) for e in last_events}
-        backfill_query = (
-            select(EarningsEvent)
-            .where(EarningsEvent.report_date <= today)
-            .order_by(
-                EarningsEvent.report_date.desc(),
-                EarningsEvent.market_cap.desc(),
-                EarningsEvent.ticker,
+                .limit(250)
             )
-            .limit(250)
+            backfill_result = await db.execute(backfill_query)
+            for candidate in backfill_result.scalars().all():
+                key = (candidate.ticker, candidate.report_date)
+                if key in existing:
+                    continue
+                last_events.append(candidate)
+                existing.add(key)
+                if len(last_events) >= _HIGHLIGHTS_LIMIT:
+                    break
+
+        last_top = sorted(
+            last_events, key=lambda e: (-_mcap_value(e.market_cap), e.ticker)
+        )[:_HIGHLIGHTS_LIMIT]
+        this_top = sorted(
+            this_events, key=lambda e: (-_mcap_value(e.market_cap), e.ticker)
+        )[:_HIGHLIGHTS_LIMIT]
+
+        logger.info(
+            "Highlights: last_week top tickers=%s, this_week top tickers=%s",
+            [(e.ticker, e.market_cap) for e in last_top[:5]],
+            [(e.ticker, e.market_cap) for e in this_top[:5]],
         )
-        backfill_result = await db.execute(backfill_query)
-        for candidate in backfill_result.scalars().all():
-            key = (candidate.ticker, candidate.report_date)
-            if key in existing:
-                continue
-            last_events.append(candidate)
-            existing.add(key)
-            if len(last_events) >= _HIGHLIGHTS_LIMIT:
-                break
 
-    last_top = sorted(
-        last_events, key=lambda e: -(e.market_cap or 0)
-    )[:_HIGHLIGHTS_LIMIT]
-    this_top = sorted(
-        this_events, key=lambda e: -(e.market_cap or 0)
-    )[:_HIGHLIGHTS_LIMIT]
+        response = HighlightsResponse(
+            last_week=HighlightsSection(
+                week_start=last_mon,
+                week_end=last_sun,
+                events=[_to_response(e) for e in last_top],
+            ),
+            this_week=HighlightsSection(
+                week_start=this_mon,
+                week_end=this_sun,
+                events=[_to_response(e) for e in this_top],
+            ),
+        )
 
-    logger.info(
-        "Highlights: last_week top tickers=%s, this_week top tickers=%s",
-        [(e.ticker, e.market_cap) for e in last_top[:5]],
-        [(e.ticker, e.market_cap) for e in this_top[:5]],
-    )
+        await set_cached_highlights(response.model_dump(mode="json"))
+        return response
+    except Exception:
+        logger.exception("Highlights generation failed")
+        if not refresh:
+            cached = await get_cached_highlights()
+            if cached:
+                return HighlightsResponse(**cached)
 
-    response = HighlightsResponse(
-        last_week=HighlightsSection(
-            week_start=last_mon,
-            week_end=last_sun,
-            events=[_to_response(e) for e in last_top],
-        ),
-        this_week=HighlightsSection(
-            week_start=this_mon,
-            week_end=this_sun,
-            events=[_to_response(e) for e in this_top],
-        ),
-    )
-
-    await set_cached_highlights(response.model_dump(mode="json"))
-
-    return response
+        today = date.today()
+        mon, fri = week_bounds(today)
+        sun = fri + timedelta(days=2)
+        return HighlightsResponse(
+            last_week=HighlightsSection(week_start=mon, week_end=sun, events=[]),
+            this_week=HighlightsSection(week_start=mon, week_end=sun, events=[]),
+        )
 
 
 @router.get("/sparkline/{ticker}")
