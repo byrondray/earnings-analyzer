@@ -74,7 +74,13 @@ async def fetch_all_earnings_from_alpha_vantage() -> list[dict]:
 
 
 NASDAQ_EARNINGS_URL = "https://api.nasdaq.com/api/calendar/earnings"
-NASDAQ_HEADERS = {"User-Agent": "Mozilla/5.0", "Accept": "application/json"}
+NASDAQ_HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Origin": "https://www.nasdaq.com",
+    "Referer": "https://www.nasdaq.com/",
+}
 
 
 _MONTH_MAP = {
@@ -120,37 +126,60 @@ async def _fetch_historical_earnings_nasdaq(
     start: date, end: date
 ) -> list[dict]:
     results = []
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
         current = start
         while current <= end:
             if current.weekday() >= 5:
                 current += timedelta(days=1)
                 continue
-            try:
-                resp = await client.get(
-                    NASDAQ_EARNINGS_URL,
-                    params={"date": current.isoformat()},
-                    headers=NASDAQ_HEADERS,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    rows = data.get("data", {}).get("rows") or []
-                    for row in rows:
-                        symbol = row.get("symbol", "")
-                        if not symbol:
-                            continue
-                        results.append({
-                            "symbol": symbol,
-                            "companyName": row.get("name", symbol),
-                            "date": current.isoformat(),
-                            "time": "",
-                            "fiscalDateEnding": _normalize_fiscal_quarter(row.get("fiscalQuarterEnding")),
-                            "epsEstimated": _parse_nasdaq_eps_forecast(row.get("epsForecast")),
-                            "marketCap": _parse_nasdaq_market_cap(row.get("marketCap")),
-                        })
-            except Exception:
-                pass
+            rows = []
+            for attempt in range(2):
+                try:
+                    resp = await client.get(
+                        NASDAQ_EARNINGS_URL,
+                        params={"date": current.isoformat()},
+                        headers=NASDAQ_HEADERS,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        rows = data.get("data", {}).get("rows") or []
+                        break
+                    logger.warning(
+                        "Nasdaq earnings fetch failed for %s (status=%d, attempt=%d)",
+                        current,
+                        resp.status_code,
+                        attempt + 1,
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Nasdaq earnings fetch exception for %s (attempt=%d): %s",
+                        current,
+                        attempt + 1,
+                        e,
+                    )
+                if attempt == 0:
+                    await asyncio.sleep(0.35)
+
+            for row in rows:
+                symbol = row.get("symbol", "")
+                if not symbol:
+                    continue
+                results.append({
+                    "symbol": symbol,
+                    "companyName": row.get("name", symbol),
+                    "date": current.isoformat(),
+                    "time": "",
+                    "fiscalDateEnding": _normalize_fiscal_quarter(row.get("fiscalQuarterEnding")),
+                    "epsEstimated": _parse_nasdaq_eps_forecast(row.get("epsForecast")),
+                    "marketCap": _parse_nasdaq_market_cap(row.get("marketCap")),
+                })
             current += timedelta(days=1)
+    logger.info(
+        "Nasdaq historical fetch completed for %s..%s with %d rows",
+        start,
+        end,
+        len(results),
+    )
     return results
 
 
@@ -371,6 +400,12 @@ async def get_week_earnings(
             if nasdaq_data:
                 events = await upsert_earnings_events(db, nasdaq_data)
                 logger.info("Fetched %d historical events from Nasdaq for %s", len(events), week_start)
+            else:
+                logger.warning(
+                    "No Nasdaq historical rows for week %s..%s",
+                    week_start,
+                    week_end,
+                )
         except Exception as e:
             logger.warning("Nasdaq historical fetch failed: %s", e)
 
