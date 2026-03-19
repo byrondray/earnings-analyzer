@@ -140,6 +140,8 @@ def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
     if report_date and report_date >= date.today() and analysis.get("has_reported") is True:
         analysis["has_reported"] = False
         _append_quality_flag(analysis, "future_report_date")
+    elif report_date and report_date < date.today() and analysis.get("has_reported") is False:
+        analysis["has_reported"] = True
 
     if analysis.get("has_reported") is False:
         analysis["eps_actual"] = None
