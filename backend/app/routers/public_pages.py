@@ -512,6 +512,30 @@ async def marketing_home(request: Request, db: AsyncSession = Depends(get_db)):
     current_events = await get_week_earnings(db, current_monday)
     previous_events = await get_week_earnings(db, previous_monday)
 
+    if not previous_events:
+        recent_cutoff = current_monday - timedelta(days=1)
+        recent_query = (
+            select(EarningsEvent)
+            .where(EarningsEvent.report_date <= recent_cutoff)
+            .order_by(
+                EarningsEvent.report_date.desc(),
+                EarningsEvent.market_cap.desc(),
+                EarningsEvent.ticker,
+            )
+            .limit(300)
+        )
+        recent_result = await db.execute(recent_query)
+        recent_events = list(recent_result.scalars().all())
+        if recent_events:
+            recent_end = recent_events[0].report_date
+            recent_start = recent_end - timedelta(days=6)
+            window_events = [
+                e for e in recent_events
+                if recent_start <= e.report_date <= recent_end
+            ]
+            previous_events = window_events if len(window_events) >= 6 else recent_events
+            previous_monday = recent_start
+
     current_top = sorted(current_events, key=lambda event: -(event.market_cap or 0))[:6]
     previous_top = sorted(previous_events, key=lambda event: -(event.market_cap or 0))[:6]
 
