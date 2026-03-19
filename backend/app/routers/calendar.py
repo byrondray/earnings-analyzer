@@ -217,11 +217,13 @@ async def get_highlights(
                     len(last_events),
                 )
 
-        last_top = sorted(
-            last_events, key=lambda e: (-(e.market_cap or 0), e.ticker)
-        )[:_HIGHLIGHTS_LIMIT]
         this_top = sorted(
             this_events, key=lambda e: (-(e.market_cap or 0), e.ticker)
+        )[:_HIGHLIGHTS_LIMIT]
+        this_tickers = {e.ticker for e in this_top}
+        last_top = sorted(
+            [e for e in last_events if e.ticker not in this_tickers],
+            key=lambda e: (-(e.market_cap or 0), e.ticker),
         )[:_HIGHLIGHTS_LIMIT]
 
         logger.info(
