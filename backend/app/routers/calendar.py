@@ -220,9 +220,9 @@ async def get_highlights(
         this_top = sorted(
             this_events, key=lambda e: (-(e.market_cap or 0), e.ticker)
         )[:_HIGHLIGHTS_LIMIT]
-        this_tickers = {e.ticker for e in this_top}
+        this_keys = {(e.ticker, e.report_date) for e in this_top}
         last_top = sorted(
-            [e for e in last_events if e.ticker not in this_tickers],
+            [e for e in last_events if (e.ticker, e.report_date) not in this_keys],
             key=lambda e: (-(e.market_cap or 0), e.ticker),
         )[:_HIGHLIGHTS_LIMIT]
 
