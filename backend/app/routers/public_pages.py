@@ -1,4 +1,7 @@
+import asyncio
 import json
+import logging
+import re
 from datetime import date, datetime, timedelta
 from html import escape
 from urllib.parse import quote
@@ -14,11 +17,23 @@ from app.routers.news import get_stock_news
 from app.services.analysis import get_cached_analysis
 from app.services.earnings_calendar import get_week_earnings, search_ticker, week_bounds
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["public-pages"])
 
 _TICKER_LIMIT = 250
+_TICKER_PATTERN = re.compile(r"^[A-Z]{1,5}([.\-][A-Z]{1,2})?$")
 _PUBLIC_NEWS_DAYS = 14
 _PUBLIC_NEWS_LIMIT = 5
+_FEATURED_LIMIT = 6
+_HISTORY_LIMIT = 8
+_RELATED_LIMIT = 6
+_STRUCTURED_DATA_EVENT_LIMIT = 20
+_RECENT_FALLBACK_LIMIT = 300
+_RECENT_FALLBACK_WINDOW_DAYS = 6
+_RECENT_FALLBACK_MIN_EVENTS = 6
+_NEWS_DESCRIPTION_MAX_LENGTH = 300
+_PAGE_CACHE_HEADER = {"Cache-Control": "public, max-age=300, stale-while-revalidate=600"}
 
 
 def _absolute_url(request: Request, path: str):
@@ -42,14 +57,15 @@ def _format_short_date(value: date | None):
 def _format_currency(value: float | None, prefix: str = "$"):
     if value is None:
         return "N/A"
+    sign = "-" if value < 0 else ""
     absolute = abs(value)
     if absolute >= 1_000_000_000:
-        return f"{prefix}{value / 1_000_000_000:.2f}B"
+        return f"{sign}{prefix}{absolute / 1_000_000_000:.2f}B"
     if absolute >= 1_000_000:
-        return f"{prefix}{value / 1_000_000:.2f}M"
+        return f"{sign}{prefix}{absolute / 1_000_000:.2f}M"
     if absolute >= 1_000:
-        return f"{prefix}{value:,.0f}"
-    return f"{prefix}{value:.2f}"
+        return f"{sign}{prefix}{absolute:,.0f}"
+    return f"{sign}{prefix}{absolute:.2f}"
 
 
 def _format_percent(value: float | None):
@@ -89,7 +105,7 @@ def _json_ld_scripts(items: list[dict] | None):
     if not items:
         return ""
     return "\n".join(
-        f'<script type="application/ld+json">{escape(json.dumps(item, ensure_ascii=False), quote=False)}</script>'
+        f'<script type="application/ld+json">{json.dumps(item, ensure_ascii=False).replace("</", "<\\/")}</script>'
         for item in items
     )
 
@@ -102,7 +118,10 @@ def _build_news_item(article: dict):
     title = escape(article.get("title") or "Untitled article")
     source = escape(article.get("source") or "Unknown source")
     published = escape(article.get("publishedAt") or "Recent")
-    description = escape(article.get("description") or "")
+    raw_description = (article.get("description") or "")[:_NEWS_DESCRIPTION_MAX_LENGTH]
+    if len(article.get("description") or "") > _NEWS_DESCRIPTION_MAX_LENGTH:
+        raw_description += "…"
+    description = escape(raw_description)
     description_block = f'<p class="muted" style="margin-top:8px;">{description}</p>' if description else ""
     return f"""
       <a class="mini-link" href="{escape(url, quote=True)}" target="_blank" rel="noopener noreferrer">
@@ -224,7 +243,7 @@ def _calendar_structured_data(request: Request, *, title: str, description: str,
             },
             "description": f"Earnings date for {event.company_name} ({event.ticker.upper()}) during the week of {monday.isoformat()} to {friday.isoformat()}.",
         }
-        for event in events[:20]
+        for event in events[:_STRUCTURED_DATA_EVENT_LIMIT]
     ]
     return [item_list, *event_entries]
 
@@ -362,7 +381,7 @@ def _build_page(*, title: str, description: str, canonical_url: str, body: str, 
     <main class=\"shell\">{body}</main>
   </body>
 </html>"""
-    return HTMLResponse(html)
+    return HTMLResponse(html, headers=_PAGE_CACHE_HEADER)
 
 
 def _page_shell(*, request: Request, title: str, description: str, canonical_path: str, body: str, og_type: str = "website", page_type: str = "WebPage", structured_data: list[dict] | None = None):
@@ -494,6 +513,37 @@ def _build_featured_card(event: EarningsEvent):
     """
 
 
+def _top_by_market_cap(events: list[EarningsEvent], limit: int):
+    return sorted(events, key=lambda e: -(e.market_cap or 0))[:limit]
+
+
+async def _fetch_recent_fallback_events(db: AsyncSession, current_monday: date):
+    recent_cutoff = current_monday - timedelta(days=1)
+    recent_query = (
+        select(EarningsEvent)
+        .where(EarningsEvent.report_date <= recent_cutoff)
+        .order_by(
+            EarningsEvent.report_date.desc(),
+            EarningsEvent.market_cap.desc(),
+            EarningsEvent.ticker,
+        )
+        .limit(_RECENT_FALLBACK_LIMIT)
+    )
+    recent_result = await db.execute(recent_query)
+    recent_events = list(recent_result.scalars().all())
+    if not recent_events:
+        return [], current_monday
+    recent_end = recent_events[0].report_date
+    recent_start = recent_end - timedelta(days=_RECENT_FALLBACK_WINDOW_DAYS)
+    window_events = [
+        e for e in recent_events
+        if recent_start <= e.report_date <= recent_end
+    ]
+    if len(window_events) >= _RECENT_FALLBACK_MIN_EVENTS:
+        return window_events, recent_start
+    return recent_events, recent_start
+
+
 def _build_stock_description(company_name: str, ticker: str, primary_event: EarningsEvent | None, analysis: dict | None):
     if primary_event is None:
         return f"Review {company_name} ({ticker}) earnings analysis, historical report dates, and quarterly expectations."
@@ -513,31 +563,10 @@ async def marketing_home(request: Request, db: AsyncSession = Depends(get_db)):
     previous_events = await get_week_earnings(db, previous_monday)
 
     if not previous_events:
-        recent_cutoff = current_monday - timedelta(days=1)
-        recent_query = (
-            select(EarningsEvent)
-            .where(EarningsEvent.report_date <= recent_cutoff)
-            .order_by(
-                EarningsEvent.report_date.desc(),
-                EarningsEvent.market_cap.desc(),
-                EarningsEvent.ticker,
-            )
-            .limit(300)
-        )
-        recent_result = await db.execute(recent_query)
-        recent_events = list(recent_result.scalars().all())
-        if recent_events:
-            recent_end = recent_events[0].report_date
-            recent_start = recent_end - timedelta(days=6)
-            window_events = [
-                e for e in recent_events
-                if recent_start <= e.report_date <= recent_end
-            ]
-            previous_events = window_events if len(window_events) >= 6 else recent_events
-            previous_monday = recent_start
+        previous_events, previous_monday = await _fetch_recent_fallback_events(db, current_monday)
 
-    current_top = sorted(current_events, key=lambda event: -(event.market_cap or 0))[:6]
-    previous_top = sorted(previous_events, key=lambda event: -(event.market_cap or 0))[:6]
+    current_top = _top_by_market_cap(current_events, _FEATURED_LIMIT)
+    previous_top = _top_by_market_cap(previous_events, _FEATURED_LIMIT)
 
     current_block = "".join(_build_featured_card(event) for event in current_top) or '<p class="muted">No current-week earnings data is available yet.</p>'
     previous_block = "".join(_build_featured_card(event) for event in previous_top) or '<p class="muted">No previous-week earnings data is available yet.</p>'
@@ -746,7 +775,7 @@ async def calendar_week(request: Request, week_start: str, db: AsyncSession = De
 @router.get("/stocks/{ticker}", response_class=HTMLResponse, include_in_schema=False)
 async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(get_db)):
     upper = ticker.upper().strip()
-    if not upper.isalpha() or len(upper) > 10:
+    if not _TICKER_PATTERN.match(upper):
         raise HTTPException(status_code=404, detail="Invalid ticker")
 
     query = (
@@ -770,29 +799,35 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
     )
     primary_event = upcoming_event or latest_event
     company_name = primary_event.company_name
-    analysis = await get_cached_analysis(db, upper)
+    try:
+        analysis = await get_cached_analysis(db, upper)
+    except Exception:
+        logger.exception("Failed to fetch cached analysis for %s", upper)
+        analysis = None
     title = f"{company_name} ({upper}) Earnings Analysis & Earnings Date | Earnings Analyzer"
     description = _build_stock_description(company_name, upper, primary_event, analysis)
     history_rows = "".join(
         _build_stock_history_item(event)
-        for event in sorted(events, key=lambda event: event.report_date, reverse=True)[:8]
+        for event in sorted(events, key=lambda event: event.report_date, reverse=True)[:_HISTORY_LIMIT]
     )
     analysis_blocks = _build_analysis_cards(analysis)
     primary_calendar_href = f"/calendar/{primary_event.report_date.isoformat()}"
     next_label = "Upcoming earnings date" if upcoming_event else "Latest earnings date"
-    news_articles = await _fetch_public_news_articles(upper)
+    news_articles, week_events = await asyncio.gather(
+        _fetch_public_news_articles(upper),
+        get_week_earnings(db, primary_event.report_date),
+    )
     news_block = "".join(
       _build_news_item(article)
       for article in news_articles
       if article.get("url")
     )
 
-    week_events = await get_week_earnings(db, primary_event.report_date)
     related_events = [
         event
         for event in week_events
         if event.ticker.upper() != upper
-    ][:6]
+    ][:_RELATED_LIMIT]
     related_block = ""
     if related_events:
         related_block = f"""
