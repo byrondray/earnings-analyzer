@@ -90,7 +90,13 @@ async def get_current_user(
         payload = _decode_token(credentials.credentials)
     except _KidNotFound:
         await _ensure_jwks(force=True)
-        payload = _decode_token(credentials.credentials)
+        try:
+            payload = _decode_token(credentials.credentials)
+        except _KidNotFound:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: unrecognized key",
+            )
     user_id = payload.get("sub")
     if not user_id:
         raise HTTPException(

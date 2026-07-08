@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from datetime import date, datetime, timedelta
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import EarningsAnalysis, EarningsEvent
@@ -193,6 +193,17 @@ def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
 async def run_analysis_streaming(
     db: AsyncSession, ticker: str, quarter: str
 ) -> AsyncGenerator[tuple[str, dict], None]:
+    try:
+        async for event_type, payload in _run_analysis_streaming_inner(db, ticker, quarter):
+            yield (event_type, payload)
+    except Exception as e:
+        logger.exception("Analysis streaming failed for %s %s", ticker, quarter)
+        yield ("error", {"error": f"Analysis failed: {e}"})
+
+
+async def _run_analysis_streaming_inner(
+    db: AsyncSession, ticker: str, quarter: str
+) -> AsyncGenerator[tuple[str, dict], None]:
     from app.services.cache import get_cached_analysis_redis, set_cached_analysis_redis
 
     yield ("status", {"step": "cache", "message": "Starting analysis..."})
@@ -252,6 +263,9 @@ async def run_analysis_streaming(
     yield ("status", {"step": "save", "message": "Saving results..."})
 
     if event:
+        await db.execute(
+            delete(EarningsAnalysis).where(EarningsAnalysis.earnings_event_id == event.id)
+        )
         earnings_analysis = EarningsAnalysis(
             earnings_event_id=event.id,
             eps_estimate=analysis.get("eps_estimate"),

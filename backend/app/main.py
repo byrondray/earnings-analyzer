@@ -4,7 +4,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.staticfiles import StaticFiles
@@ -122,6 +122,8 @@ if STATIC_DIR.is_dir():
 
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
         file_path = (STATIC_DIR / full_path).resolve()
         if not file_path.is_relative_to(STATIC_DIR.resolve()):
             return FileResponse(STATIC_DIR / "index.html")

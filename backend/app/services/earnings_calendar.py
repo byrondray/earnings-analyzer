@@ -397,8 +397,8 @@ async def search_ticker(
                     })
                 if av_results:
                     await upsert_earnings_events(db, av_results)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Alpha Vantage search_ticker failed for %s: %s", upper_ticker, e)
 
     query = (
         select(EarningsEvent)
@@ -495,3 +495,43 @@ async def get_week_earnings(
         events,
         key=lambda e: (e.report_date, -(e.market_cap or 0), e.ticker),
     )
+
+
+_RECENT_FALLBACK_LIMIT = 300
+_RECENT_FALLBACK_WINDOW_DAYS = 6
+_RECENT_FALLBACK_MIN_EVENTS = 6
+
+
+async def fetch_recent_fallback_events(
+    db: AsyncSession, before_date: date, min_events: int = _RECENT_FALLBACK_MIN_EVENTS
+) -> tuple[list[EarningsEvent], date]:
+    """Find the most recent window of earnings events before `before_date`.
+
+    Used when the requested week has no data (e.g. sparse historical
+    coverage), to fall back to whatever the most recent reported week was.
+    """
+    recent_cutoff = before_date - timedelta(days=1)
+    recent_query = (
+        select(EarningsEvent)
+        .where(EarningsEvent.report_date <= recent_cutoff)
+        .order_by(
+            EarningsEvent.report_date.desc(),
+            EarningsEvent.market_cap.desc(),
+            EarningsEvent.ticker,
+        )
+        .limit(_RECENT_FALLBACK_LIMIT)
+    )
+    recent_result = await db.execute(recent_query)
+    recent_events = list(recent_result.scalars().all())
+    if not recent_events:
+        return [], before_date
+
+    recent_end = recent_events[0].report_date
+    recent_start = recent_end - timedelta(days=_RECENT_FALLBACK_WINDOW_DAYS)
+    window_events = [
+        e for e in recent_events
+        if recent_start <= e.report_date <= recent_end
+    ]
+    if len(window_events) >= min_events:
+        return window_events, recent_start
+    return recent_events, recent_start

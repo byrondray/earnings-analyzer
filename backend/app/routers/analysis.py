@@ -8,18 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db.database import get_db
 from app.services.analysis import run_analysis_streaming, get_cached_analysis
+from app.validation import validate_ticker as _validate_ticker
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
-_TICKER_RE = re.compile(r"^[A-Z]{1,10}$")
 _QUARTER_RE = re.compile(r"^Q[1-4]-\d{4}$")
-
-
-def _validate_ticker(ticker: str) -> str:
-    upper = ticker.upper().strip()
-    if not _TICKER_RE.match(upper):
-        raise HTTPException(status_code=422, detail="Invalid ticker format")
-    return upper
 
 
 def _validate_quarter(quarter: str) -> str:

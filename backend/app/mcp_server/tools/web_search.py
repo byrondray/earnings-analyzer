@@ -91,9 +91,12 @@ async def _search_brave(
         if resp.status_code == 429:
             logger.error("Brave rate limit exhausted after %d retries for query: %s", max_retries, query)
             return []
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            logger.error("Brave search failed with status %d for query: %s", resp.status_code, query)
+            return []
         data = resp.json()
         return data.get("web", {}).get("results", [])
+    return []
 
 
 async def search_earnings_report(ticker: str, quarter: str, company_name: str | None = None) -> str:

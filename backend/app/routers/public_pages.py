@@ -15,7 +15,12 @@ from app.db.database import get_db
 from app.db.models import EarningsEvent, ReportTime
 from app.routers.news import get_stock_news
 from app.services.analysis import get_cached_analysis
-from app.services.earnings_calendar import get_week_earnings, search_ticker, week_bounds
+from app.services.earnings_calendar import (
+    fetch_recent_fallback_events,
+    get_week_earnings,
+    search_ticker,
+    week_bounds,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +34,6 @@ _FEATURED_LIMIT = 6
 _HISTORY_LIMIT = 8
 _RELATED_LIMIT = 6
 _STRUCTURED_DATA_EVENT_LIMIT = 20
-_RECENT_FALLBACK_LIMIT = 300
-_RECENT_FALLBACK_WINDOW_DAYS = 6
-_RECENT_FALLBACK_MIN_EVENTS = 6
 _NEWS_DESCRIPTION_MAX_LENGTH = 300
 _PAGE_CACHE_HEADER = {"Cache-Control": "public, max-age=300, stale-while-revalidate=600"}
 
@@ -517,33 +519,6 @@ def _top_by_market_cap(events: list[EarningsEvent], limit: int):
     return sorted(events, key=lambda e: -(e.market_cap or 0))[:limit]
 
 
-async def _fetch_recent_fallback_events(db: AsyncSession, current_monday: date):
-    recent_cutoff = current_monday - timedelta(days=1)
-    recent_query = (
-        select(EarningsEvent)
-        .where(EarningsEvent.report_date <= recent_cutoff)
-        .order_by(
-            EarningsEvent.report_date.desc(),
-            EarningsEvent.market_cap.desc(),
-            EarningsEvent.ticker,
-        )
-        .limit(_RECENT_FALLBACK_LIMIT)
-    )
-    recent_result = await db.execute(recent_query)
-    recent_events = list(recent_result.scalars().all())
-    if not recent_events:
-        return [], current_monday
-    recent_end = recent_events[0].report_date
-    recent_start = recent_end - timedelta(days=_RECENT_FALLBACK_WINDOW_DAYS)
-    window_events = [
-        e for e in recent_events
-        if recent_start <= e.report_date <= recent_end
-    ]
-    if len(window_events) >= _RECENT_FALLBACK_MIN_EVENTS:
-        return window_events, recent_start
-    return recent_events, recent_start
-
-
 def _build_stock_description(company_name: str, ticker: str, primary_event: EarningsEvent | None, analysis: dict | None):
     if primary_event is None:
         return f"Review {company_name} ({ticker}) earnings analysis, historical report dates, and quarterly expectations."
@@ -563,7 +538,7 @@ async def marketing_home(request: Request, db: AsyncSession = Depends(get_db)):
     previous_events = await get_week_earnings(db, previous_monday)
 
     if not previous_events:
-        previous_events, previous_monday = await _fetch_recent_fallback_events(db, current_monday)
+        previous_events, previous_monday = await fetch_recent_fallback_events(db, current_monday)
 
     current_top = _top_by_market_cap(current_events, _FEATURED_LIMIT)
     previous_top = _top_by_market_cap(previous_events, _FEATURED_LIMIT)

@@ -69,7 +69,7 @@ class TestAnalyzeEarnings:
             await analyze_earnings("AAPL", "Some data")
 
         call_kwargs = mock_client.messages.create.call_args.kwargs
-        assert call_kwargs["model"] == "claude-sonnet-4-20250514"
+        assert call_kwargs["model"] == "claude-sonnet-5"
         assert call_kwargs["tools"] == [ANALYSIS_TOOL]
         assert call_kwargs["tool_choice"] == {
             "type": "tool",

@@ -226,8 +226,8 @@ async def analyze_earnings(ticker: str, earnings_data: str, event_context: dict 
         company_hint = f" ({event_context['company_name']})"
 
     response = await client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1024,
+        model="claude-sonnet-5",
+        max_tokens=4096,
         system=f"{SYSTEM_PROMPT}\n\nToday's date: {date.today().isoformat()}",
         tools=[ANALYSIS_TOOL],
         tool_choice={"type": "tool", "name": "earnings_analysis_result"},
@@ -238,6 +238,9 @@ async def analyze_earnings(ticker: str, earnings_data: str, event_context: dict 
             }
         ],
     )
+
+    if response.stop_reason == "max_tokens":
+        return {"error": "Analysis was truncated because it exceeded the token limit"}
 
     for block in response.content:
         if block.type == "tool_use" and block.name == "earnings_analysis_result":

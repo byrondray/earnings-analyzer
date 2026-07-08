@@ -7,6 +7,7 @@ from app.mcp_server.tools.web_search import search_earnings_report, _extract_tex
 
 def _make_mock_brave_client(response_data):
     mock_response = MagicMock()
+    mock_response.status_code = 200
     mock_response.json.return_value = response_data
     mock_response.raise_for_status = MagicMock()
 

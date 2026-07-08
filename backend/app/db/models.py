@@ -58,7 +58,7 @@ class EarningsAnalysis(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     earnings_event_id = Column(
-        Integer, ForeignKey("earnings_events.id"), nullable=False
+        Integer, ForeignKey("earnings_events.id"), nullable=False, index=True
     )
     eps_estimate = Column(Float, nullable=True)
     eps_actual = Column(Float, nullable=True)

@@ -1,13 +1,14 @@
 import logging
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 import httpx
 
+from app.auth import get_current_user
 from app.config import get_settings
 from app.db.database import get_db
 from app.db.models import EarningsEvent, ReportTime
@@ -16,12 +17,14 @@ from app.services.cache import (
     get_cached_sparkline, set_cached_sparkline,
 )
 from app.services.earnings_calendar import (
+    fetch_recent_fallback_events,
     get_week_earnings,
     search_ticker,
     week_bounds,
     _fetch_historical_earnings_nasdaq,
     _fetch_historical_earnings_fmp,
 )
+from app.validation import MAX_TICKERS_PER_REQUEST, validate_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -183,33 +186,13 @@ async def get_highlights(
         this_events = await get_week_earnings(db, this_mon)
 
         if not last_events:
-            recent_cutoff = this_mon - timedelta(days=1)
-            recent_query = (
-                select(EarningsEvent)
-                .where(EarningsEvent.report_date <= recent_cutoff)
-                .order_by(
-                    EarningsEvent.report_date.desc(),
-                    EarningsEvent.market_cap.desc(),
-                    EarningsEvent.ticker,
-                )
-                .limit(300)
+            fallback_events, fallback_start = await fetch_recent_fallback_events(
+                db, this_mon, min_events=_HIGHLIGHTS_LIMIT
             )
-            recent_result = await db.execute(recent_query)
-            recent_events = list(recent_result.scalars().all())
-
-            if recent_events:
-                recent_end = recent_events[0].report_date
-                recent_start = recent_end - timedelta(days=6)
-                window_events = [
-                    e for e in recent_events
-                    if recent_start <= e.report_date <= recent_end
-                ]
-                if len(window_events) < _HIGHLIGHTS_LIMIT:
-                    window_events = recent_events
-
-                last_events = window_events
-                last_mon = recent_start
-                last_sun = recent_end
+            if fallback_events:
+                last_events = fallback_events
+                last_mon = fallback_start
+                last_sun = max(e.report_date for e in fallback_events)
                 logger.info(
                     "Last week empty; using recent earnings window %s..%s (%d events)",
                     last_mon,
@@ -265,7 +248,7 @@ async def get_highlights(
 
 @router.get("/sparkline/{ticker}")
 async def get_sparkline(ticker: str):
-    upper = ticker.upper().strip()
+    upper = validate_ticker(ticker)
 
     cached = await get_cached_sparkline(upper)
     if cached is not None:
@@ -279,11 +262,17 @@ async def get_sparkline(ticker: str):
 
 @router.get("/sparklines")
 async def get_sparklines(tickers: list[str] = Query(..., alias="t")):
+    if len(tickers) > MAX_TICKERS_PER_REQUEST:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Too many tickers; max {MAX_TICKERS_PER_REQUEST} per request",
+        )
+
     result = {}
     to_fetch = []
 
     for t in tickers:
-        upper = t.upper().strip()
+        upper = validate_ticker(t)
         cached = await get_cached_sparkline(upper)
         if cached is not None:
             result[upper] = cached
@@ -307,6 +296,7 @@ async def get_sparklines(tickers: list[str] = Query(..., alias="t")):
 @router.get("/debug/source-check")
 async def debug_source_check(
     target_date: date = Query(default=None, alias="date"),
+    user_id: str = Depends(get_current_user),
 ):
     if target_date is None:
         target_date = date.today()

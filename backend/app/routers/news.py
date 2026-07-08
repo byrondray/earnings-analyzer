@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
@@ -7,6 +7,7 @@ import httpx
 
 from app.config import get_settings
 from app.services.cache import get_cached, set_cached
+from app.validation import validate_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ async def get_stock_news(
     ticker: str,
     days: int = Query(default=30, ge=1, le=90),
 ):
-    upper = ticker.upper().strip()
+    upper = validate_ticker(ticker)
     cache_key = f"news:{upper}:{days}"
 
     cached = await get_cached(cache_key)
@@ -60,7 +61,7 @@ async def get_stock_news(
 
 
 async def _fetch_newsapi(ticker: str, days: int, api_key: str) -> list[dict]:
-    from_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+    from_date = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
     url = "https://newsapi.org/v2/everything"
     params = {
         "q": f"{ticker} stock earnings",
@@ -116,9 +117,9 @@ async def _fetch_brave_news(ticker: str, api_key: str) -> list[dict]:
                 "title": r.get("title", ""),
                 "description": r.get("description", ""),
                 "url": r.get("url", ""),
-                "source": r.get("meta_url", {}).get("hostname", ""),
-                "publishedAt": r.get("age", ""),
-                "imageUrl": r.get("thumbnail", {}).get("src"),
+                "source": (r.get("meta_url") or {}).get("hostname", ""),
+                "publishedAt": r.get("page_age") or r.get("age", ""),
+                "imageUrl": (r.get("thumbnail") or {}).get("src"),
             }
             for r in results
         ]

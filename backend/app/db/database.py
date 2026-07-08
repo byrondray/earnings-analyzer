@@ -39,9 +39,6 @@ def get_session_factory():
     return _session_factory
 
 
-engine = property(lambda self: get_engine())
-
-
 async def get_db() -> AsyncSession:
     factory = get_session_factory()
     async with factory() as session:

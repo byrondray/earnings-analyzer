@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 import httpx
 
 from app.services.cache import get_cached, set_cached
+from app.validation import validate_ticker
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ async def get_chart_data(
     ticker: str,
     range: str = Query(default="1M", description="Timeframe: 1D, 5D, 1M, 3M, 6M, 1Y, 5Y"),
 ):
-    upper = ticker.upper().strip()
+    upper = validate_ticker(ticker)
     range_upper = range.upper().strip()
 
     if range_upper not in RANGE_MAP:
