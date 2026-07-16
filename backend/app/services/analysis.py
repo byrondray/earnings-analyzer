@@ -137,10 +137,15 @@ def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
         _append_quality_flag(analysis, "missing_primary_source")
 
     report_date = _parse_report_date(event_context)
-    if report_date and report_date >= date.today() and analysis.get("has_reported") is True:
+    report_time = (event_context or {}).get("report_time")
+    is_future = bool(report_date) and (
+        report_date > date.today()
+        or (report_date == date.today() and report_time != "pre_market")
+    )
+    if is_future and analysis.get("has_reported") is True:
         analysis["has_reported"] = False
         _append_quality_flag(analysis, "future_report_date")
-    elif report_date and report_date < date.today() and analysis.get("has_reported") is False:
+    elif report_date and not is_future and analysis.get("has_reported") is False:
         analysis["has_reported"] = True
 
     if analysis.get("has_reported") is False:
@@ -242,6 +247,7 @@ async def _run_analysis_streaming_inner(
         event_context = {
             "company_name": event.company_name,
             "report_date": event.report_date.isoformat() if event.report_date else None,
+            "report_time": event.report_time.value if event.report_time else None,
             "eps_estimate": float(event.eps_estimate) if event.eps_estimate is not None else None,
             "revenue_estimate": float(event.revenue_estimate) if event.revenue_estimate is not None else None,
             "fiscal_quarter": event.fiscal_quarter,
@@ -253,12 +259,13 @@ async def _run_analysis_streaming_inner(
 
     yield ("status", {"step": "analyze", "message": "Reading articles & analyzing with AI..."})
     analysis = await analyze_earnings(ticker, search_results, event_context=event_context)
-    analysis = _apply_quality_gate(analysis, event_context)
-    logger.info("Analysis result for %s %s: has_reported=%s", ticker, quarter, analysis.get("has_reported"))
 
     if "error" in analysis:
         yield ("error", analysis)
         return
+
+    analysis = _apply_quality_gate(analysis, event_context)
+    logger.info("Analysis result for %s %s: has_reported=%s", ticker, quarter, analysis.get("has_reported"))
 
     yield ("status", {"step": "save", "message": "Saving results..."})
 
@@ -266,26 +273,37 @@ async def _run_analysis_streaming_inner(
         await db.execute(
             delete(EarningsAnalysis).where(EarningsAnalysis.earnings_event_id == event.id)
         )
-        earnings_analysis = EarningsAnalysis(
-            earnings_event_id=event.id,
-            eps_estimate=analysis.get("eps_estimate"),
-            eps_actual=analysis.get("eps_actual"),
-            eps_surprise_pct=analysis.get("eps_surprise_pct"),
-            revenue_estimate=analysis.get("revenue_estimate"),
-            revenue_actual=analysis.get("revenue_actual"),
-            revenue_surprise_pct=analysis.get("revenue_surprise_pct"),
-            guidance_summary=analysis.get("guidance_summary"),
-            sentiment=analysis.get("sentiment"),
-            sentiment_score=analysis.get("sentiment_score"),
-            price_reaction_pct=analysis.get("price_reaction_pct"),
-            raw_analysis=analysis,
-            analyzed_at=datetime.utcnow(),
+    else:
+        await db.execute(
+            delete(EarningsAnalysis).where(
+                EarningsAnalysis.earnings_event_id.is_(None),
+                EarningsAnalysis.ticker == ticker.upper(),
+                EarningsAnalysis.fiscal_quarter == quarter,
+            )
         )
-        db.add(earnings_analysis)
-        await db.commit()
-        await db.refresh(earnings_analysis)
-        analysis["id"] = earnings_analysis.id
-        analysis["earnings_event_id"] = event.id
+
+    earnings_analysis = EarningsAnalysis(
+        earnings_event_id=event.id if event else None,
+        ticker=ticker.upper(),
+        fiscal_quarter=quarter,
+        eps_estimate=analysis.get("eps_estimate"),
+        eps_actual=analysis.get("eps_actual"),
+        eps_surprise_pct=analysis.get("eps_surprise_pct"),
+        revenue_estimate=analysis.get("revenue_estimate"),
+        revenue_actual=analysis.get("revenue_actual"),
+        revenue_surprise_pct=analysis.get("revenue_surprise_pct"),
+        guidance_summary=analysis.get("guidance_summary"),
+        sentiment=analysis.get("sentiment"),
+        sentiment_score=analysis.get("sentiment_score"),
+        price_reaction_pct=analysis.get("price_reaction_pct"),
+        raw_analysis=analysis,
+        analyzed_at=datetime.utcnow(),
+    )
+    db.add(earnings_analysis)
+    await db.commit()
+    await db.refresh(earnings_analysis)
+    analysis["id"] = earnings_analysis.id
+    analysis["earnings_event_id"] = event.id if event else None
 
     analysis["ticker"] = ticker.upper()
     analysis["quarter"] = quarter
@@ -299,14 +317,10 @@ async def _run_analysis_streaming_inner(
 async def get_cached_analysis(
     db: AsyncSession, ticker: str, quarter: str | None = None
 ) -> dict | None:
-    query = (
-        select(EarningsAnalysis)
-        .join(EarningsEvent)
-        .where(EarningsEvent.ticker == ticker.upper())
-    )
+    query = select(EarningsAnalysis).where(EarningsAnalysis.ticker == ticker.upper())
 
     if quarter is not None:
-        query = query.where(EarningsEvent.fiscal_quarter == quarter)
+        query = query.where(EarningsAnalysis.fiscal_quarter == quarter)
 
     query = query.order_by(EarningsAnalysis.analyzed_at.desc()).limit(1)
 

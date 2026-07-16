@@ -58,8 +58,10 @@ class EarningsAnalysis(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     earnings_event_id = Column(
-        Integer, ForeignKey("earnings_events.id"), nullable=False, index=True
+        Integer, ForeignKey("earnings_events.id"), nullable=True, index=True
     )
+    ticker = Column(String(10), nullable=False, index=True)
+    fiscal_quarter = Column(String(20), nullable=True)
     eps_estimate = Column(Float, nullable=True)
     eps_actual = Column(Float, nullable=True)
     eps_surprise_pct = Column(Float, nullable=True)

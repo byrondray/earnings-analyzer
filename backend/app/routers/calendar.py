@@ -15,6 +15,7 @@ from app.db.models import EarningsEvent, ReportTime
 from app.services.cache import (
     get_cached_highlights, set_cached_highlights,
     get_cached_sparkline, set_cached_sparkline,
+    get_cached_calendar, set_cached_calendar,
 )
 from app.services.earnings_calendar import (
     fetch_recent_fallback_events,
@@ -93,6 +94,34 @@ async def search_stock(
     )
 
 
+async def _get_week_response(db: AsyncSession, target_date: date) -> WeekEarningsResponse:
+    monday, friday = week_bounds(target_date)
+    week_end = friday + timedelta(days=2)
+
+    is_past_week = week_end < date.today()
+    cache_key = monday.isoformat()
+    if is_past_week:
+        cached = await get_cached_calendar(cache_key)
+        if cached is not None:
+            return WeekEarningsResponse(
+                week_start=monday, week_end=week_end, events=cached
+            )
+
+    events = await get_week_earnings(db, target_date)
+    response = WeekEarningsResponse(
+        week_start=monday,
+        week_end=week_end,
+        events=[_to_response(e) for e in events],
+    )
+
+    if is_past_week and events:
+        await set_cached_calendar(
+            cache_key, [e.model_dump(mode="json") for e in response.events]
+        )
+
+    return response
+
+
 @router.get("/week", response_model=WeekEarningsResponse)
 async def get_calendar_week(
     target_date: date = Query(default=None, alias="date"),
@@ -100,16 +129,7 @@ async def get_calendar_week(
 ):
     if target_date is None:
         target_date = date.today()
-
-    events = await get_week_earnings(db, target_date)
-    monday, friday = week_bounds(target_date)
-    week_end = friday + timedelta(days=2)
-
-    return WeekEarningsResponse(
-        week_start=monday,
-        week_end=week_end,
-        events=[_to_response(e) for e in events],
-    )
+    return await _get_week_response(db, target_date)
 
 
 @router.get("/week/next", response_model=WeekEarningsResponse)
@@ -120,15 +140,7 @@ async def get_next_week(
     if target_date is None:
         target_date = date.today()
     next_week = target_date + timedelta(weeks=1)
-    events = await get_week_earnings(db, next_week)
-    monday, friday = week_bounds(next_week)
-    week_end = friday + timedelta(days=2)
-
-    return WeekEarningsResponse(
-        week_start=monday,
-        week_end=week_end,
-        events=[_to_response(e) for e in events],
-    )
+    return await _get_week_response(db, next_week)
 
 
 @router.get("/week/prev", response_model=WeekEarningsResponse)
@@ -139,15 +151,7 @@ async def get_prev_week(
     if target_date is None:
         target_date = date.today()
     prev_week = target_date - timedelta(weeks=1)
-    events = await get_week_earnings(db, prev_week)
-    monday, friday = week_bounds(prev_week)
-    week_end = friday + timedelta(days=2)
-
-    return WeekEarningsResponse(
-        week_start=monday,
-        week_end=week_end,
-        events=[_to_response(e) for e in events],
-    )
+    return await _get_week_response(db, prev_week)
 
 
 _HIGHLIGHTS_LIMIT = 10

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.db.database import get_db
 from app.db.models import UserFavorite
+from app.validation import validate_ticker
 
 router = APIRouter(prefix="/api/favorites", tags=["favorites"])
 
@@ -47,15 +48,16 @@ async def check_favorites(
     if not tickers:
         return {"favorites": {}}
 
+    clean_tickers = [validate_ticker(t) for t in tickers]
     result = await db.execute(
         select(UserFavorite.ticker)
         .where(
             UserFavorite.clerk_user_id == user_id,
-            UserFavorite.ticker.in_(tickers),
+            UserFavorite.ticker.in_(clean_tickers),
         )
     )
     favorited = {row[0] for row in result.all()}
-    return {"favorites": {t: t in favorited for t in tickers}}
+    return {"favorites": {t: t in favorited for t in clean_tickers}}
 
 
 @router.post("/{ticker}", status_code=status.HTTP_201_CREATED, response_model=FavoriteResponse)
@@ -65,7 +67,7 @@ async def add_favorite(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    ticker = ticker.upper()
+    ticker = validate_ticker(ticker)
 
     existing = await db.execute(
         select(UserFavorite).where(
@@ -96,7 +98,7 @@ async def remove_favorite(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    ticker = ticker.upper()
+    ticker = validate_ticker(ticker)
     result = await db.execute(
         delete(UserFavorite).where(
             UserFavorite.clerk_user_id == user_id,
