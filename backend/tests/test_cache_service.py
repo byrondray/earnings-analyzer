@@ -186,7 +186,7 @@ class TestAnalysisCache:
         mock_redis = AsyncMock()
         mock_get_redis.return_value = mock_redis
 
-        analysis = {"ticker": "AAPL", "sentiment": "bullish"}
+        analysis = {"ticker": "AAPL", "sentiment": "bullish", "has_reported": True}
         await set_cached_analysis_redis("AAPL", "Q4-2025", analysis)
         mock_redis.setex.assert_called_once()
         call_args = mock_redis.setex.call_args

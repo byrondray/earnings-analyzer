@@ -38,6 +38,29 @@ async def close_redis():
         _redis_client = None
 
 
+async def get_cached(key: str) -> Any | None:
+    r = await get_redis()
+    if r is None:
+        return None
+    try:
+        data = await r.get(key)
+        if data:
+            return json.loads(data)
+    except Exception:
+        pass
+    return None
+
+
+async def set_cached(key: str, value: Any, ttl: int = 3600):
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        await r.setex(key, ttl, json.dumps(value, default=str))
+    except Exception:
+        pass
+
+
 def _calendar_key(week_start: str) -> str:
     return f"earnings:calendar:{week_start}"
 
@@ -55,30 +78,12 @@ async def set_cached_calendar(week_start: str, events: list[dict]):
 
 
 async def get_cached_market_cap(ticker: str) -> float | None:
-    r = await get_redis()
-    if r is None:
-        return None
-    try:
-        data = await r.get(_market_cap_key(ticker))
-        if data:
-            return float(data)
-    except Exception:
-        pass
-    return None
+    value = await get_cached(_market_cap_key(ticker))
+    return float(value) if value is not None else None
 
 
 async def set_cached_market_cap(ticker: str, market_cap: float):
-    r = await get_redis()
-    if r is None:
-        return
-    try:
-        await r.setex(
-            _market_cap_key(ticker),
-            MARKET_CAP_TTL,
-            str(market_cap),
-        )
-    except Exception:
-        pass
+    await set_cached(_market_cap_key(ticker), market_cap, ttl=MARKET_CAP_TTL)
 
 
 async def get_many_cached_market_caps(tickers: list[str]) -> dict[str, float | None]:
@@ -114,61 +119,23 @@ def _analysis_key(ticker: str, quarter: str) -> str:
 
 
 async def get_cached_analysis_redis(ticker: str, quarter: str) -> dict | None:
-    r = await get_redis()
-    if r is None:
-        return None
-    try:
-        data = await r.get(_analysis_key(ticker, quarter))
-        if data:
-            return json.loads(data)
-    except Exception:
-        pass
-    return None
+    return await get_cached(_analysis_key(ticker, quarter))
 
 
 async def set_cached_analysis_redis(ticker: str, quarter: str, analysis: dict):
-    r = await get_redis()
-    if r is None:
-        return
-    try:
-        ttl = ANALYSIS_TTL if analysis.get("has_reported") is True else ANALYSIS_UNREPORTED_TTL
-        await r.setex(
-            _analysis_key(ticker, quarter),
-            ttl,
-            json.dumps(analysis, default=str),
-        )
-    except Exception:
-        pass
+    ttl = ANALYSIS_TTL if analysis.get("has_reported") is True else ANALYSIS_UNREPORTED_TTL
+    await set_cached(_analysis_key(ticker, quarter), analysis, ttl=ttl)
 
 
 _HIGHLIGHTS_KEY = "earnings:highlights:v4"
 
 
 async def get_cached_highlights() -> dict | None:
-    r = await get_redis()
-    if r is None:
-        return None
-    try:
-        data = await r.get(_HIGHLIGHTS_KEY)
-        if data:
-            return json.loads(data)
-    except Exception:
-        pass
-    return None
+    return await get_cached(_HIGHLIGHTS_KEY)
 
 
 async def set_cached_highlights(highlights: dict):
-    r = await get_redis()
-    if r is None:
-        return
-    try:
-        await r.setex(
-            _HIGHLIGHTS_KEY,
-            HIGHLIGHTS_TTL,
-            json.dumps(highlights, default=str),
-        )
-    except Exception:
-        pass
+    await set_cached(_HIGHLIGHTS_KEY, highlights, ttl=HIGHLIGHTS_TTL)
 
 
 def _sparkline_key(ticker: str) -> str:
@@ -176,53 +143,11 @@ def _sparkline_key(ticker: str) -> str:
 
 
 async def get_cached_sparkline(ticker: str) -> list[float] | None:
-    r = await get_redis()
-    if r is None:
-        return None
-    try:
-        data = await r.get(_sparkline_key(ticker))
-        if data:
-            return json.loads(data)
-    except Exception:
-        pass
-    return None
+    return await get_cached(_sparkline_key(ticker))
 
 
 async def set_cached_sparkline(ticker: str, prices: list[float], ttl: int = SPARKLINE_TTL):
-    r = await get_redis()
-    if r is None:
-        return
-    try:
-        await r.setex(
-            _sparkline_key(ticker),
-            ttl,
-            json.dumps(prices),
-        )
-    except Exception:
-        pass
-
-
-async def get_cached(key: str) -> Any | None:
-    r = await get_redis()
-    if r is None:
-        return None
-    try:
-        data = await r.get(key)
-        if data:
-            return json.loads(data)
-    except Exception:
-        pass
-    return None
-
-
-async def set_cached(key: str, value: Any, ttl: int = 3600):
-    r = await get_redis()
-    if r is None:
-        return
-    try:
-        await r.setex(key, ttl, json.dumps(value, default=str))
-    except Exception:
-        pass
+    await set_cached(_sparkline_key(ticker), prices, ttl=ttl)
 
 
 def _analysis_lock_key(ticker: str, quarter: str) -> str:
