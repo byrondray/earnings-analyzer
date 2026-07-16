@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     BRAVE_SEARCH_API_KEY: str = ""
     CLERK_SECRET_KEY: str = ""
     CLERK_JWKS_URL: str = ""
+    CORS_ORIGINS: str = ""
 
     model_config = {
         "env_file": _find_env_file(),

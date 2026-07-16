@@ -90,9 +90,10 @@ async def search_stock(
     ticker: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    events = await search_ticker(db, ticker)
+    upper = validate_ticker(ticker)
+    events = await search_ticker(db, upper)
     return SearchResponse(
-        ticker=ticker.upper().strip(),
+        ticker=upper,
         events=[_to_response(e) for e in events],
     )
 
@@ -193,13 +194,13 @@ async def get_highlights(
         this_events = await get_week_earnings(db, this_mon)
 
         if not last_events:
-            fallback_events, fallback_start = await fetch_recent_fallback_events(
+            fallback_events, fallback_start, fallback_end = await fetch_recent_fallback_events(
                 db, this_mon, min_events=_HIGHLIGHTS_LIMIT
             )
             if fallback_events:
                 last_events = fallback_events
                 last_mon = fallback_start
-                last_sun = max(e.report_date for e in fallback_events)
+                last_sun = fallback_end
                 logger.info(
                     "Last week empty; using recent earnings window %s..%s (%d events)",
                     last_mon,
@@ -303,7 +304,9 @@ async def get_sparklines(request: Request, tickers: list[str] = Query(..., alias
 
 
 @router.get("/debug/source-check")
+@limiter.limit("5/hour")
 async def debug_source_check(
+    request: Request,
     target_date: date = Query(default=None, alias="date"),
     user_id: str = Depends(get_current_user),
 ):

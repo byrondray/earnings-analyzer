@@ -1,14 +1,11 @@
 <script>
-  import { formatLargeNumber } from '../lib/utils.js';
+  import { formatLargeNumber, todayKey } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
   import Sparkline from './Sparkline.svelte';
 
   let { event, onShowAnalysis, onError, user = null, isFavorited = false, onFavoriteChange } = $props();
 
-  let hasReported = $derived(() => {
-    const today = new Date().toISOString().split('T')[0];
-    return event.report_date < today;
-  });
+  let hasReported = $derived(event.report_date < todayKey());
 
   function handleClick() {
     onShowAnalysis({
@@ -28,7 +25,7 @@
       <span class="font-bold text-sm text-accent-green">{event.ticker}</span>
       <FavoriteButton ticker={event.ticker} companyName={event.company_name} {isFavorited} {onFavoriteChange} {user} />
     </div>
-    {#if !hasReported()}
+    {#if !hasReported}
       <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-gold/15 text-accent-gold uppercase">Upcoming</span>
     {:else}
       <span class="text-[0.65rem] font-bold px-1.5 py-0.5 rounded-md bg-accent-green/15 text-accent-green uppercase">Reported</span>

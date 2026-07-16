@@ -5,7 +5,7 @@ import logging
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import EarningsAnalysis, EarningsEvent, _utcnow_naive
+from app.db.models import EarningsAnalysis, EarningsEvent, Sentiment, _utcnow_naive
 from app.mcp_server.tools.web_search import search_earnings_report
 from app.mcp_server.tools.analyze import analyze_earnings
 
@@ -140,7 +140,7 @@ def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
     report_time = (event_context or {}).get("report_time")
     is_future = bool(report_date) and (
         report_date > date.today()
-        or (report_date == date.today() and report_time != "pre_market")
+        or (report_date == date.today() and report_time == "post_market")
     )
     if is_future and analysis.get("has_reported") is True:
         analysis["has_reported"] = False
@@ -172,6 +172,23 @@ def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
             analysis["revenue_surprise_pct"] = _recompute_surprise(
                 analysis.get("revenue_actual"), analysis.get("revenue_estimate")
             )
+
+    for field in (
+        "eps_estimate", "eps_actual", "eps_surprise_pct",
+        "revenue_estimate", "revenue_actual", "revenue_surprise_pct",
+        "price_reaction_pct", "sentiment_score",
+    ):
+        if field in analysis:
+            analysis[field] = _coerce_float(analysis.get(field))
+
+    sentiment = analysis.get("sentiment")
+    if isinstance(sentiment, str):
+        sentiment = sentiment.strip().lower()
+    if sentiment not in {s.value for s in Sentiment}:
+        if sentiment is not None:
+            _append_quality_flag(analysis, "invalid_sentiment")
+        sentiment = None
+    analysis["sentiment"] = sentiment
 
     guidance_summary = analysis.get("guidance_summary")
     if not isinstance(guidance_summary, str) or not guidance_summary.strip():
@@ -246,32 +263,30 @@ async def _run_analysis_streaming_inner(
         await release_analysis_lock(ticker, quarter)
 
 
+def _quarter_from_report_date(report_date: date) -> str:
+    q = (report_date.month - 1) // 3 + 1
+    return f"Q{q}-{report_date.year}"
+
+
 async def _run_analysis_with_lock(
     db: AsyncSession, ticker: str, quarter: str
 ) -> AsyncGenerator[tuple[str, dict], None]:
     from app.services.cache import set_cached_analysis_redis
 
-    event_query = (
+    events_query = (
         select(EarningsEvent)
-        .where(
-            EarningsEvent.ticker == ticker.upper(),
-            EarningsEvent.fiscal_quarter == quarter,
-        )
+        .where(EarningsEvent.ticker == ticker.upper())
         .order_by(EarningsEvent.report_date.desc())
-        .limit(1)
     )
-    event_result = await db.execute(event_query)
-    event = event_result.scalar_one_or_none()
+    events_result = await db.execute(events_query)
+    candidates = list(events_result.scalars().all())
 
-    if not event:
-        fallback_query = (
-            select(EarningsEvent)
-            .where(EarningsEvent.ticker == ticker.upper())
-            .order_by(EarningsEvent.report_date.desc())
-            .limit(1)
-        )
-        fallback_result = await db.execute(fallback_query)
-        event = fallback_result.scalar_one_or_none()
+    event = next(
+        (e for e in candidates if _quarter_from_report_date(e.report_date) == quarter),
+        None,
+    )
+    if not event and candidates:
+        event = candidates[0]
 
     event_context = None
     company_name = None
@@ -365,7 +380,7 @@ async def get_cached_analysis(
 
     has_reported = True
     if analysis.raw_analysis and isinstance(analysis.raw_analysis, dict):
-        has_reported = analysis.raw_analysis.get("has_reported", True)
+        has_reported = analysis.raw_analysis.get("has_reported", False)
 
     stale = False
     if not has_reported and analysis.analyzed_at:

@@ -271,11 +271,12 @@ async def upsert_earnings_events(
 
     rows = []
     for item in events_data:
-        if not item.get("symbol") or not item.get("date"):
+        symbol = (item.get("symbol") or "").strip().upper()
+        if not symbol or not item.get("date") or len(symbol) > 10:
             continue
         row = {
-            "ticker": item["symbol"],
-            "company_name": item.get("companyName", item["symbol"]),
+            "ticker": symbol,
+            "company_name": item.get("companyName", symbol)[:255],
             "report_date": date.fromisoformat(item["date"]),
             "report_time": _map_report_time(item.get("time")),
             "fiscal_quarter": item.get("fiscalDateEnding"),
@@ -540,11 +541,12 @@ _RECENT_FALLBACK_MIN_EVENTS = 6
 
 async def fetch_recent_fallback_events(
     db: AsyncSession, before_date: date, min_events: int = _RECENT_FALLBACK_MIN_EVENTS
-) -> tuple[list[EarningsEvent], date]:
+) -> tuple[list[EarningsEvent], date, date]:
     """Find the most recent window of earnings events before `before_date`.
 
     Used when the requested week has no data (e.g. sparse historical
     coverage), to fall back to whatever the most recent reported week was.
+    Returns (events, window_start, window_end).
     """
     recent_cutoff = before_date - timedelta(days=1)
     recent_query = (
@@ -560,7 +562,7 @@ async def fetch_recent_fallback_events(
     recent_result = await db.execute(recent_query)
     recent_events = list(recent_result.scalars().all())
     if not recent_events:
-        return [], before_date
+        return [], before_date, before_date
 
     recent_end = recent_events[0].report_date
     recent_start = recent_end - timedelta(days=_RECENT_FALLBACK_WINDOW_DAYS)
@@ -569,5 +571,5 @@ async def fetch_recent_fallback_events(
         if recent_start <= e.report_date <= recent_end
     ]
     if len(window_events) >= min_events:
-        return window_events, recent_start
-    return recent_events, recent_start
+        return window_events, recent_start, recent_end
+    return recent_events, recent_start, recent_end

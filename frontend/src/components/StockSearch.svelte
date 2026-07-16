@@ -1,6 +1,6 @@
 <script>
   import { searchStock } from '../lib/api.js';
-  import { formatLargeNumber, formatDateReadable } from '../lib/utils.js';
+  import { formatLargeNumber, formatDateReadable, formatReportTime, todayKey } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
 
   let { onShowAnalysis, onError, user = null, favorites = new Set(), onFavoriteChange } = $props();
@@ -32,15 +32,8 @@
     results = null;
   }
 
-  function formatTime(time) {
-    if (time === 'pre_market') return '🌅 Before Market';
-    if (time === 'post_market') return '🌙 After Market';
-    return '⏰ TBD';
-  }
-
   function isInPast(dateStr) {
-    const today = new Date().toISOString().split('T')[0];
-    return dateStr < today;
+    return dateStr < todayKey();
   }
 </script>
 
@@ -109,7 +102,7 @@
                 </div>
                 <div class="flex items-center gap-3 mt-1 text-xs text-text-muted">
                   <span class="font-medium text-text-secondary">{formatDateReadable(event.report_date)}</span>
-                  <span>{formatTime(event.report_time)}</span>
+                  <span>{formatReportTime(event.report_time)}</span>
                 </div>
               </div>
               <div class="flex items-center gap-3 shrink-0 text-xs text-text-muted">

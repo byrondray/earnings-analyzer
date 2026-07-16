@@ -538,7 +538,7 @@ async def marketing_home(request: Request, db: AsyncSession = Depends(get_db)):
     previous_events = await get_week_earnings(db, previous_monday)
 
     if not previous_events:
-        previous_events, previous_monday = await fetch_recent_fallback_events(db, current_monday)
+        previous_events, previous_monday, _ = await fetch_recent_fallback_events(db, current_monday)
 
     current_top = _top_by_market_cap(current_events, _FEATURED_LIMIT)
     previous_top = _top_by_market_cap(previous_events, _FEATURED_LIMIT)

@@ -1,5 +1,6 @@
 <script module>
   import { fetchSparklines } from '../lib/api.js';
+  import { UP_COLOR, DOWN_COLOR } from '../lib/utils.js';
 
   const sparklineCache = new Map();
   let pendingTickers = new Set();
@@ -108,7 +109,7 @@
   });
 
   let isUp = $derived(prices.length >= 2 && prices[prices.length - 1] >= prices[0]);
-  let color = $derived(isUp ? 'var(--color-accent-green)' : '#ef4444');
+  let color = $derived(isUp ? UP_COLOR : DOWN_COLOR);
 </script>
 
 <div bind:this={container} class="w-full mt-auto">

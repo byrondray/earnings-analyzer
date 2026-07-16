@@ -2,7 +2,7 @@ import re
 
 from fastapi import HTTPException
 
-_TICKER_RE = re.compile(r"^[A-Z]{1,10}([.\-][A-Z]{1,2})?$")
+_TICKER_RE = re.compile(r"^(?=.{1,10}$)[A-Z]{1,10}([.\-][A-Z]{1,2})?$")
 
 MAX_TICKERS_PER_REQUEST = 30
 

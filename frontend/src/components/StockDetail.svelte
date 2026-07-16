@@ -1,6 +1,6 @@
 <script>
   import { getAnalysis, triggerAnalysis, fetchStockNews, fetchChartData, searchStock } from '../lib/api.js';
-  import { formatLargeNumber, formatPercent, getSentimentColor, getSentimentEmoji, formatNewsDate } from '../lib/utils.js';
+  import { formatLargeNumber, formatPercent, getSentimentColor, getSentimentEmoji, formatNewsDate, todayKey, UP_COLOR, DOWN_COLOR } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
 
   let {
@@ -54,7 +54,7 @@
       let cached = await getAnalysis(ticker, quarter);
       if (cached) {
         analysis = cached;
-        if (cached.has_reported === false && cached.stale) {
+        if (cached.has_reported === false && cached.stale && user) {
           analysisStatus = 'Refreshing analysis...';
           triggerAnalysis(ticker, quarter, (msg) => {
             analysisStatus = msg;
@@ -70,6 +70,11 @@
         }
         loadingAnalysis = false;
         analysisStatus = '';
+        return;
+      }
+      if (!user) {
+        analysisStatus = '';
+        loadingAnalysis = false;
         return;
       }
       analysisStatus = 'Starting analysis...';
@@ -151,7 +156,7 @@
     try {
       const data = await searchStock(ticker);
       if (data?.events?.length) {
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayKey();
         const targetQuarter = resolveTargetQuarterFromSelection();
 
         if (selectedReportDate) {
@@ -202,25 +207,30 @@
     return `Q${q}-${now.getFullYear()}`;
   }
 
-  function qualityTone(score) {
-    if (score == null) return 'text-text-muted border-border-subtle bg-surface-primary';
-    if (score >= 0.75) return 'text-accent-green border-accent-green/30 bg-accent-green/10';
-    if (score >= 0.5) return 'text-accent-gold border-accent-gold/30 bg-accent-gold/10';
-    return 'text-red-400 border-red-400/30 bg-red-400/10';
+  const QUALITY_TONE = {
+    high: 'text-accent-green border-accent-green/30 bg-accent-green/10',
+    medium: 'text-accent-gold border-accent-gold/30 bg-accent-gold/10',
+    low: 'text-red-400 border-red-400/30 bg-red-400/10',
+  };
+
+  const QUALITY_LABEL = { high: 'High', medium: 'Medium', low: 'Low' };
+
+  const QUALITY_SUMMARY = {
+    high: 'This analysis is well-supported by available sources.',
+    medium: 'This analysis is directionally useful, but some figures may be incomplete.',
+    low: 'This analysis is preliminary. Treat key numbers as tentative until stronger sources are available.',
+  };
+
+  function qualityTone(completeness) {
+    return QUALITY_TONE[completeness] ?? 'text-text-muted border-border-subtle bg-surface-primary';
   }
 
-  function qualityLabel(score) {
-    if (score == null) return 'Unknown';
-    if (score >= 0.75) return 'High';
-    if (score >= 0.5) return 'Medium';
-    return 'Low';
+  function qualityLabel(completeness) {
+    return QUALITY_LABEL[completeness] ?? 'Unknown';
   }
 
-  function qualitySummary(score) {
-    if (score == null) return 'We could not determine confidence for this analysis yet.';
-    if (score >= 0.75) return 'This analysis is well-supported by available sources.';
-    if (score >= 0.5) return 'This analysis is directionally useful, but some figures may be incomplete.';
-    return 'This analysis is preliminary. Treat key numbers as tentative until stronger sources are available.';
+  function qualitySummary(completeness) {
+    return QUALITY_SUMMARY[completeness] ?? 'We could not determine confidence for this analysis yet.';
   }
 
   function formatCompleteness(value) {
@@ -282,8 +292,7 @@
 
   let reportDatePassedButUnconfirmed = $derived.by(() => {
     if (analysis?.has_reported !== false || !earningsEvent?.report_date) return false;
-    const today = new Date().toISOString().split('T')[0];
-    return earningsEvent.report_date < today;
+    return earningsEvent.report_date < todayKey();
   });
 
   let qualityInsights = $derived.by(() => {
@@ -293,40 +302,45 @@
 
   let allNA = $derived(analysis && analysis.eps_estimate == null && analysis.eps_actual == null && analysis.revenue_estimate == null && analysis.revenue_actual == null);
 
-  let chartPath = $derived.by(() => {
-    if (!chartData?.points?.length || chartData.points.length < 2) return '';
-    const prices = chartData.points.map(p => p.c);
+  const CHART_W = 800;
+  const CHART_H = 300;
+  const CHART_PAD = 8;
+
+  let chartGeometry = $derived.by(() => {
+    const points = chartData?.points ?? [];
+    if (points.length < 2) return null;
+    const prices = points.map(p => p.c);
     const min = Math.min(...prices);
     const max = Math.max(...prices);
     const range = max - min || 1;
-    const w = 800;
-    const h = 300;
-    const pad = 8;
-    const usableH = h - pad * 2;
-    const step = w / (prices.length - 1);
+    const usableH = CHART_H - CHART_PAD * 2;
+    const step = CHART_W / (prices.length - 1);
+    return { prices, min, max, range, usableH, step };
+  });
 
-    return prices
+  let chartPath = $derived.by(() => {
+    const geo = chartGeometry;
+    if (!geo) return '';
+    return geo.prices
       .map((p, i) => {
-        const x = (i * step).toFixed(1);
-        const y = (pad + usableH - ((p - min) / range) * usableH).toFixed(1);
+        const x = (i * geo.step).toFixed(1);
+        const y = (CHART_PAD + geo.usableH - ((p - geo.min) / geo.range) * geo.usableH).toFixed(1);
         return `${i === 0 ? 'M' : 'L'}${x},${y}`;
       })
       .join(' ');
   });
 
   let chartAreaPath = $derived.by(() => {
-    if (!chartPath || !chartData?.points?.length) return '';
-    const prices = chartData.points.map(p => p.c);
-    const w = 800;
-    const h = 300;
-    return `${chartPath} L${w},${h} L0,${h} Z`;
+    if (!chartPath || !chartGeometry) return '';
+    return `${chartPath} L${CHART_W},${CHART_H} L0,${CHART_H} Z`;
   });
 
   let chartColor = $derived.by(() => {
-    if (!chartData?.points?.length || chartData.points.length < 2) return '#34AC56';
-    const first = chartData.points[0].c;
-    const last = chartData.points[chartData.points.length - 1].c;
-    return last >= first ? '#34AC56' : '#ef4444';
+    const geo = chartGeometry;
+    if (!geo) return UP_COLOR;
+    const first = geo.prices[0];
+    const last = geo.prices[geo.prices.length - 1];
+    return last >= first ? UP_COLOR : DOWN_COLOR;
   });
 
   let priceChange = $derived.by(() => {
@@ -341,35 +355,25 @@
   let currentPrice = $derived(chartData?.meta?.regularMarketPrice ?? chartData?.points?.[chartData.points.length - 1]?.c);
 
   let chartYLabels = $derived.by(() => {
-    if (!chartData?.points?.length) return [];
-    const prices = chartData.points.map(p => p.c);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const range = max - min || 1;
+    const geo = chartGeometry;
+    if (!geo) return [];
     const steps = 5;
+    const labelH = CHART_H - 16;
     const labels = [];
     for (let i = 0; i <= steps; i++) {
-      const value = min + (range * i) / steps;
-      labels.push({ value: value.toFixed(2), y: ((300 - 16) - ((value - min) / range) * (300 - 16)).toFixed(1) });
+      const value = geo.min + (geo.range * i) / steps;
+      labels.push({ value: value.toFixed(2), y: (labelH - ((value - geo.min) / geo.range) * labelH).toFixed(1) });
     }
     return labels;
   });
 
   let hoverInfo = $derived.by(() => {
-    if (hoverIndex < 0 || !chartData?.points?.length) return null;
+    const geo = chartGeometry;
+    if (hoverIndex < 0 || !geo) return null;
     const point = chartData.points[hoverIndex];
     if (!point) return null;
-    const prices = chartData.points.map(p => p.c);
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const range = max - min || 1;
-    const w = 800;
-    const h = 300;
-    const pad = 8;
-    const usableH = h - pad * 2;
-    const step = w / (prices.length - 1);
-    const x = hoverIndex * step;
-    const y = pad + usableH - ((point.c - min) / range) * usableH;
+    const x = hoverIndex * geo.step;
+    const y = CHART_PAD + geo.usableH - ((point.c - geo.min) / geo.range) * geo.usableH;
     const date = new Date(point.t * 1000);
     let timeStr;
     if (chartRange === '1D' || chartRange === '5D') {
@@ -377,7 +381,7 @@
     } else {
       timeStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
-    return { x, y, price: point.c, time: timeStr, xPct: (x / w) * 100, yPct: (y / h) * 100 };
+    return { x, y, price: point.c, time: timeStr, xPct: (x / CHART_W) * 100, yPct: (y / CHART_H) * 100 };
   });
 
   let _lastHoverTime = 0;
@@ -510,12 +514,16 @@
           <p class="text-red-400 text-sm">⚠️ {analysisError}</p>
           <button class="mt-3 px-4 py-2 bg-accent-green text-white border-none rounded-xl cursor-pointer text-sm font-semibold hover:brightness-110 transition-all" onclick={loadAnalysis}>Retry Analysis</button>
         </div>
+      {:else if !analysis && !user}
+        <div class="glass-card-solid rounded-2xl p-6">
+          <p class="text-sm text-text-muted">Sign in to generate AI-powered earnings analysis for this stock.</p>
+        </div>
       {:else if analysis}
         <div class="glass-card-solid rounded-2xl p-5 border border-border-subtle">
           <div class="flex flex-wrap items-center gap-2 mb-3">
             <span class="text-xs text-text-muted font-bold uppercase tracking-widest">How reliable this analysis is</span>
-            <span class="text-xs font-semibold px-2 py-1 rounded-lg border {qualityTone(confidenceScore)}">
-              Confidence: {qualityLabel(confidenceScore)}{#if confidenceScore != null} ({(confidenceScore * 100).toFixed(0)}%){/if}
+            <span class="text-xs font-semibold px-2 py-1 rounded-lg border {qualityTone(dataCompleteness)}">
+              Confidence: {qualityLabel(dataCompleteness)}{#if confidenceScore != null} ({(confidenceScore * 100).toFixed(0)}%){/if}
             </span>
             <span class="text-xs font-semibold px-2 py-1 rounded-lg border border-border-subtle bg-surface-primary text-text-muted">
               Coverage: {formatCompleteness(dataCompleteness)}
@@ -525,7 +533,7 @@
             </span>
           </div>
 
-          <p class="text-sm text-text-secondary mb-3">{qualitySummary(confidenceScore)}</p>
+          <p class="text-sm text-text-secondary mb-3">{qualitySummary(dataCompleteness)}</p>
 
           {#if qualityInsights.length > 0}
             <div class="rounded-xl border border-accent-gold/30 bg-accent-gold/8 px-3 py-2 mb-3">

@@ -35,20 +35,30 @@ export function groupByDate(events) {
   return groups;
 }
 
+export function toLocalDateKey(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function getDaysOfWeek(weekStart) {
   const days = [];
   const start = new Date(weekStart + 'T00:00:00');
   for (let i = 0; i < 5; i++) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
-    days.push(d.toISOString().split('T')[0]);
+    days.push(toLocalDateKey(d));
   }
   return days;
 }
 
 export function isToday(dateStr) {
-  const today = new Date().toISOString().split('T')[0];
-  return dateStr === today;
+  return dateStr === toLocalDateKey(new Date());
+}
+
+export function todayKey() {
+  return toLocalDateKey(new Date());
 }
 
 export function formatReportTime(time) {
@@ -71,10 +81,23 @@ export function formatPercent(num) {
   return `${sign}${num.toFixed(2)}%`;
 }
 
+export const SENTIMENT_COLORS = {
+  bullish: '#34AC56',
+  bearish: '#ef4444',
+  neutral: '#f59e0b',
+};
+
+export const UP_COLOR = '#34AC56';
+export const DOWN_COLOR = '#ef4444';
+
 export function getSentimentColor(sentiment) {
-  if (sentiment === 'bullish') return '#34AC56';
-  if (sentiment === 'bearish') return '#ef4444';
-  return '#f59e0b';
+  return SENTIMENT_COLORS[sentiment] ?? SENTIMENT_COLORS.neutral;
+}
+
+export function formatWeekRange(start, end) {
+  const s = new Date(start + 'T00:00:00');
+  const e = new Date(end + 'T00:00:00');
+  return `${s.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} – ${e.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
 }
 
 export function getSentimentEmoji(sentiment) {

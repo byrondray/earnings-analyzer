@@ -150,7 +150,7 @@ async def set_cached_analysis_redis(ticker: str, quarter: str, analysis: dict):
     if r is None:
         return
     try:
-        ttl = ANALYSIS_UNREPORTED_TTL if analysis.get("has_reported") is False else ANALYSIS_TTL
+        ttl = ANALYSIS_TTL if analysis.get("has_reported") is True else ANALYSIS_UNREPORTED_TTL
         await r.setex(
             _analysis_key(ticker, quarter),
             ttl,

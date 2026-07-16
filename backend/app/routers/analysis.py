@@ -47,7 +47,9 @@ async def analyze_ticker(
 
 
 @router.get("/{ticker}")
+@limiter.limit("60/minute")
 async def get_analysis(
+    request: Request,
     ticker: str,
     quarter: str | None = Query(default=None, description="Fiscal quarter, e.g. Q4-2025"),
     db: AsyncSession = Depends(get_db),

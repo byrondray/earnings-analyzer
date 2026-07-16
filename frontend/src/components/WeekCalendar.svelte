@@ -1,6 +1,6 @@
 <script>
   import { fetchWeekEarnings } from '../lib/api.js';
-  import { getDaysOfWeek, groupByDate } from '../lib/utils.js';
+  import { getDaysOfWeek, groupByDate, todayKey, toLocalDateKey, formatWeekRange } from '../lib/utils.js';
   import DayColumn from './DayColumn.svelte';
 
   let { onShowAnalysis, onError, user = null, favorites = new Set(), onFavoriteChange } = $props();
@@ -11,7 +11,7 @@
 
   function getDateFromUrl() {
     const params = new URLSearchParams(window.location.search);
-    return params.get('week') || new Date().toISOString().split('T')[0];
+    return params.get('week') || todayKey();
   }
 
   let currentDate = $state(getDateFromUrl());
@@ -39,18 +39,18 @@
     if (!weekData) return;
     const next = new Date(weekData.week_end + 'T00:00:00');
     next.setDate(next.getDate() + 3);
-    pushDate(next.toISOString().split('T')[0]);
+    pushDate(toLocalDateKey(next));
   }
 
   function goPrevWeek() {
     if (!weekData) return;
     const prev = new Date(weekData.week_start + 'T00:00:00');
     prev.setDate(prev.getDate() - 3);
-    pushDate(prev.toISOString().split('T')[0]);
+    pushDate(toLocalDateKey(prev));
   }
 
   function goToday() {
-    pushDate(new Date().toISOString().split('T')[0]);
+    pushDate(todayKey());
   }
 
   function handlePopState() {
@@ -80,9 +80,7 @@
   {#if weekData}
     <div class="flex justify-between items-center mb-4 px-2">
       <span class="text-lg font-semibold text-text-primary">
-        {new Date(weekData.week_start + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
-        –
-        {new Date(weekData.week_end + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+        {formatWeekRange(weekData.week_start, weekData.week_end)}
       </span>
       <span class="text-text-muted text-sm">{weekData.events.length} earnings reports</span>
     </div>

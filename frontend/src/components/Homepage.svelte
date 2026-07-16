@@ -1,6 +1,6 @@
 <script>
   import { fetchHighlights, searchStock } from '../lib/api.js';
-  import { formatLargeNumber, formatDate } from '../lib/utils.js';
+  import { formatLargeNumber, formatDate, formatWeekRange, todayKey } from '../lib/utils.js';
   import FavoriteButton from './FavoriteButton.svelte';
   import Sparkline from './Sparkline.svelte';
 
@@ -40,15 +40,8 @@
     });
   });
 
-  function formatWeekRange(start, end) {
-    const s = new Date(start + 'T00:00:00');
-    const e = new Date(end + 'T00:00:00');
-    return `${s.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })} – ${e.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`;
-  }
-
   function hasReported(event) {
-    const today = new Date().toISOString().split('T')[0];
-    return event.report_date < today;
+    return event.report_date < todayKey();
   }
 
   function handleCardClick(event) {
@@ -244,7 +237,7 @@
       <div class="text-center mt-2">
         <button
           class="px-8 py-3 bg-accent-green border border-accent-green rounded-2xl cursor-pointer text-sm font-bold text-white transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_15px_rgba(52,172,86,0.3)]"
-          onclick={() => onNavigateToCalendar(new Date().toISOString().split('T')[0])}
+          onclick={() => onNavigateToCalendar(todayKey())}
         >
           View Full Calendar →
         </button>

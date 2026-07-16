@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,6 +14,7 @@ from slowapi import _rate_limit_exceeded_handler
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.db.database import get_db, get_engine
 from app.rate_limit import limiter
 from app.routers import analysis, calendar, chart, favorites, news, public_pages
@@ -58,7 +58,7 @@ app.add_middleware(SlowAPIMiddleware)
 
 
 def _get_cors_origins() -> list[str]:
-    extra = os.environ.get("CORS_ORIGINS", "")
+    extra = get_settings().CORS_ORIGINS
     origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
     if extra:
         origins.extend(o.strip() for o in extra.split(",") if o.strip())

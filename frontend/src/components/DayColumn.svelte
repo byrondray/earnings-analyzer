@@ -1,5 +1,5 @@
 <script>
-  import { formatDate, isToday, formatReportTime } from '../lib/utils.js';
+  import { formatDate, isToday, formatReportTime, todayKey } from '../lib/utils.js';
   import EarningsCard from './EarningsCard.svelte';
 
   let { dateStr, events, onShowAnalysis, onError, user = null, favorites = new Set(), onFavoriteChange } = $props();
@@ -7,7 +7,7 @@
   let preMarket = $derived(events.filter(e => e.report_time === 'pre_market'));
   let postMarket = $derived(events.filter(e => e.report_time === 'post_market'));
   let unknown = $derived(events.filter(e => e.report_time === 'unknown'));
-  let isPast = $derived(dateStr < new Date().toISOString().split('T')[0]);
+  let isPast = $derived(dateStr < todayKey());
   let allUnknownTime = $derived(preMarket.length === 0 && postMarket.length === 0);
 </script>
 
