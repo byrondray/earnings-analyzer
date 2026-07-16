@@ -371,34 +371,40 @@ async def _enrich_market_caps_from_nasdaq(
 async def search_ticker(
     db: AsyncSession, ticker: str
 ) -> list[EarningsEvent]:
+    from app.services.cache import should_search_alpha_vantage, mark_alpha_vantage_searched
+
     upper_ticker = ticker.upper().strip()
 
-    try:
-        settings = get_settings()
-        params = {
-            "function": "EARNINGS_CALENDAR",
-            "horizon": "3month",
-            "symbol": upper_ticker,
-            "apikey": settings.ALPHA_VANTAGE_API_KEY,
-        }
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(ALPHA_VANTAGE_BASE, params=params)
-            if resp.status_code == 200 and resp.text and not resp.text.startswith("{"):
-                reader = csv.DictReader(io.StringIO(resp.text))
-                av_results = []
-                for row in reader:
-                    av_results.append({
-                        "symbol": row.get("symbol", ""),
-                        "companyName": row.get("name", row.get("symbol", "")),
-                        "date": row.get("reportDate", ""),
-                        "time": row.get("timeOfTheDay", ""),
-                        "fiscalDateEnding": row.get("fiscalDateEnding"),
-                        "epsEstimated": _safe_float(row.get("estimate")),
-                    })
-                if av_results:
-                    await upsert_earnings_events(db, av_results)
-    except Exception as e:
-        logger.warning("Alpha Vantage search_ticker failed for %s: %s", upper_ticker, e)
+    if await should_search_alpha_vantage(upper_ticker):
+        try:
+            settings = get_settings()
+            params = {
+                "function": "EARNINGS_CALENDAR",
+                "horizon": "3month",
+                "symbol": upper_ticker,
+                "apikey": settings.ALPHA_VANTAGE_API_KEY,
+            }
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(ALPHA_VANTAGE_BASE, params=params)
+                if resp.status_code == 200 and resp.text and not resp.text.startswith("{"):
+                    reader = csv.DictReader(io.StringIO(resp.text))
+                    av_results = []
+                    for row in reader:
+                        av_results.append({
+                            "symbol": row.get("symbol", ""),
+                            "companyName": row.get("name", row.get("symbol", "")),
+                            "date": row.get("reportDate", ""),
+                            "time": row.get("timeOfTheDay", ""),
+                            "fiscalDateEnding": row.get("fiscalDateEnding"),
+                            "epsEstimated": _safe_float(row.get("estimate")),
+                        })
+                    if av_results:
+                        await upsert_earnings_events(db, av_results)
+            await mark_alpha_vantage_searched(upper_ticker)
+        except Exception as e:
+            logger.warning("Alpha Vantage search_ticker failed for %s: %s", upper_ticker, e)
+    else:
+        logger.debug("Skipping Alpha Vantage search for %s (cached within TTL)", upper_ticker)
 
     query = (
         select(EarningsEvent)
@@ -409,18 +415,20 @@ async def search_ticker(
     return list(result.scalars().all())
 
 
-async def _sync_alpha_vantage_data(db: AsyncSession):
-    from app.services.cache import should_sync_alpha_vantage, mark_alpha_vantage_synced
+_av_sync_task: "asyncio.Task | None" = None
 
-    if not await should_sync_alpha_vantage():
-        logger.debug("Skipping Alpha Vantage sync (cached within TTL)")
-        return
+
+async def _do_alpha_vantage_sync():
+    from app.services.cache import mark_alpha_vantage_synced
+    from app.db.database import get_session_factory
 
     logger.info("Syncing earnings data from Alpha Vantage...")
     try:
         all_data = await fetch_all_earnings_from_alpha_vantage()
         if all_data:
-            await upsert_earnings_events(db, all_data)
+            factory = get_session_factory()
+            async with factory() as session:
+                await upsert_earnings_events(session, all_data)
             logger.info("Successfully synced %d events from Alpha Vantage", len(all_data))
             await mark_alpha_vantage_synced()
         else:
@@ -428,6 +436,31 @@ async def _sync_alpha_vantage_data(db: AsyncSession):
             await mark_alpha_vantage_synced(ttl=300)
     except Exception as e:
         logger.error("Alpha Vantage sync failed: %s", e, exc_info=True)
+
+
+def _trigger_alpha_vantage_sync_background():
+    """Kick off an Alpha Vantage sync without blocking the caller.
+
+    Uses its own DB session (not the request-scoped one) since the task
+    keeps running after the triggering request/session has closed.
+    """
+    global _av_sync_task
+    if _av_sync_task is not None and not _av_sync_task.done():
+        return
+    _av_sync_task = asyncio.create_task(_do_alpha_vantage_sync())
+
+
+async def _sync_alpha_vantage_data(db: AsyncSession):
+    from app.services.cache import should_sync_alpha_vantage, mark_alpha_vantage_synced
+
+    if not await should_sync_alpha_vantage():
+        logger.debug("Skipping Alpha Vantage sync (cached within TTL)")
+        return
+
+    # Mark as synced immediately so concurrent requests don't all trigger
+    # their own background sync while this one is in flight.
+    await mark_alpha_vantage_synced(ttl=300)
+    _trigger_alpha_vantage_sync_background()
 
 
 async def get_week_earnings(

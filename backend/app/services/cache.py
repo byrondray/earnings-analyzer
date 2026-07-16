@@ -296,3 +296,30 @@ async def mark_alpha_vantage_synced(ttl: int | None = None):
         await r.setex(_AV_SYNC_KEY, ttl or AV_SYNC_TTL, "1")
     except Exception:
         pass
+
+
+AV_TICKER_SEARCH_TTL = 4 * 60 * 60  # 4 hours; throttles per-ticker AV lookups triggered by search
+
+
+def _av_ticker_search_key(ticker: str) -> str:
+    return f"earnings:av_ticker_search:{ticker.upper()}"
+
+
+async def should_search_alpha_vantage(ticker: str) -> bool:
+    r = await get_redis()
+    if r is None:
+        return True
+    try:
+        return await r.get(_av_ticker_search_key(ticker)) is None
+    except Exception:
+        return True
+
+
+async def mark_alpha_vantage_searched(ticker: str):
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        await r.setex(_av_ticker_search_key(ticker), AV_TICKER_SEARCH_TTL, "1")
+    except Exception:
+        pass

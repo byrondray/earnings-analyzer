@@ -1,7 +1,6 @@
 import os
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy.pool import NullPool
 from app.config import get_settings
 
 
@@ -26,7 +25,10 @@ def get_engine():
         _engine = create_async_engine(
             _async_url,
             echo=False,
-            poolclass=NullPool,
+            pool_size=5,
+            max_overflow=5,
+            pool_pre_ping=True,
+            pool_recycle=300,
             connect_args={} if is_railway else {"ssl": False},
         )
     return _engine

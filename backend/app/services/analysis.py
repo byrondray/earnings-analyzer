@@ -206,10 +206,19 @@ async def run_analysis_streaming(
         yield ("error", {"error": f"Analysis failed: {e}"})
 
 
+_LOCK_POLL_INTERVAL = 2.0
+_LOCK_POLL_MAX_ATTEMPTS = 45  # ~90s, matches ANALYSIS_LOCK_TTL
+
+
 async def _run_analysis_streaming_inner(
     db: AsyncSession, ticker: str, quarter: str
 ) -> AsyncGenerator[tuple[str, dict], None]:
-    from app.services.cache import get_cached_analysis_redis, set_cached_analysis_redis
+    from app.services.cache import (
+        get_cached_analysis_redis,
+        acquire_analysis_lock,
+        release_analysis_lock,
+    )
+    import asyncio
 
     yield ("status", {"step": "cache", "message": "Starting analysis..."})
 
@@ -217,6 +226,30 @@ async def _run_analysis_streaming_inner(
     if cached:
         yield ("result", cached)
         return
+
+    got_lock = await acquire_analysis_lock(ticker, quarter)
+    if not got_lock:
+        yield ("status", {"step": "wait", "message": "Analysis already in progress, waiting for result..."})
+        for _ in range(_LOCK_POLL_MAX_ATTEMPTS):
+            await asyncio.sleep(_LOCK_POLL_INTERVAL)
+            cached = await get_cached_analysis_redis(ticker, quarter)
+            if cached:
+                yield ("result", cached)
+                return
+        yield ("error", {"error": "Timed out waiting for in-progress analysis"})
+        return
+
+    try:
+        async for event in _run_analysis_with_lock(db, ticker, quarter):
+            yield event
+    finally:
+        await release_analysis_lock(ticker, quarter)
+
+
+async def _run_analysis_with_lock(
+    db: AsyncSession, ticker: str, quarter: str
+) -> AsyncGenerator[tuple[str, dict], None]:
+    from app.services.cache import set_cached_analysis_redis
 
     event_query = (
         select(EarningsEvent)
