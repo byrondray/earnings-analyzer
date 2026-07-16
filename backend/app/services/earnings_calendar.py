@@ -264,7 +264,7 @@ def _safe_float(val: str | None) -> float | None:
 
 
 async def upsert_earnings_events(
-    db: AsyncSession, events_data: list[dict]
+    db: AsyncSession, events_data: list[dict], return_events: bool = True
 ) -> list[EarningsEvent]:
     if not events_data:
         return []
@@ -303,6 +303,9 @@ async def upsert_earnings_events(
     )
     await db.execute(stmt)
     await db.commit()
+
+    if not return_events:
+        return []
 
     min_report_date = min(r["report_date"] for r in rows)
     max_report_date = max(r["report_date"] for r in rows)
@@ -399,7 +402,7 @@ async def search_ticker(
                             "epsEstimated": _safe_float(row.get("estimate")),
                         })
                     if av_results:
-                        await upsert_earnings_events(db, av_results)
+                        await upsert_earnings_events(db, av_results, return_events=False)
             await mark_alpha_vantage_searched(upper_ticker)
         except Exception as e:
             logger.warning("Alpha Vantage search_ticker failed for %s: %s", upper_ticker, e)

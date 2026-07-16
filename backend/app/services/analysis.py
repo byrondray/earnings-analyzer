@@ -1,11 +1,11 @@
 from collections.abc import AsyncGenerator
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 import logging
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import EarningsAnalysis, EarningsEvent
+from app.db.models import EarningsAnalysis, EarningsEvent, _utcnow_naive
 from app.mcp_server.tools.web_search import search_earnings_report
 from app.mcp_server.tools.analyze import analyze_earnings
 
@@ -330,7 +330,7 @@ async def _run_analysis_with_lock(
         sentiment_score=analysis.get("sentiment_score"),
         price_reaction_pct=analysis.get("price_reaction_pct"),
         raw_analysis=analysis,
-        analyzed_at=datetime.utcnow(),
+        analyzed_at=_utcnow_naive(),
     )
     db.add(earnings_analysis)
     await db.commit()
@@ -370,7 +370,7 @@ async def get_cached_analysis(
     stale = False
     if not has_reported and analysis.analyzed_at:
         from app.services.cache import ANALYSIS_UNREPORTED_TTL
-        age = datetime.utcnow() - analysis.analyzed_at
+        age = _utcnow_naive() - analysis.analyzed_at
         stale = age >= timedelta(seconds=ANALYSIS_UNREPORTED_TTL)
 
     return {

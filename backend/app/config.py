@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     NEWS_API_KEY: str = ""
     POLYGON_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_ANALYSIS_MODEL: str = "claude-sonnet-5"
     BRAVE_SEARCH_API_KEY: str = ""
     CLERK_SECRET_KEY: str = ""
     CLERK_JWKS_URL: str = ""

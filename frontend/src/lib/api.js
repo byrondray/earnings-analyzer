@@ -36,19 +36,42 @@ export async function fetchPrevWeek(dateStr = null) {
   return res.json();
 }
 
+class AnalysisStreamError extends Error {}
+
+const ANALYSIS_STREAM_TIMEOUT_MS = 120_000;
+
 export async function triggerAnalysis(ticker, quarter, onStatus) {
   const token = await getToken();
   const headers = { Accept: 'text/event-stream' };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(
-    `${API_BASE}/analysis/${ticker}?quarter=${encodeURIComponent(quarter)}`,
-    {
-      method: 'POST',
-      headers,
-    },
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    ANALYSIS_STREAM_TIMEOUT_MS,
   );
-  if (!res.ok) throw new Error(`Analysis failed: ${res.status}`);
+
+  let res;
+  try {
+    res = await fetch(
+      `${API_BASE}/analysis/${ticker}?quarter=${encodeURIComponent(quarter)}`,
+      {
+        method: 'POST',
+        headers,
+        signal: controller.signal,
+      },
+    );
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Analysis timed out');
+    }
+    throw err;
+  }
+  if (!res.ok) {
+    clearTimeout(timeoutId);
+    throw new Error(`Analysis failed: ${res.status}`);
+  }
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -69,29 +92,25 @@ export async function triggerAnalysis(ticker, quarter, onStatus) {
         if (line.startsWith('event: ')) {
           eventType = line.slice(7).trim();
         } else if (line.startsWith('data: ') && eventType) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (eventType === 'status' && onStatus) {
-              onStatus(data.message);
-            } else if (eventType === 'result') {
-              result = data;
-            } else if (eventType === 'error') {
-              throw new Error(data.error || 'Analysis failed');
-            }
-          } catch (parseErr) {
-            if (
-              parseErr.message === 'Analysis failed' ||
-              parseErr.message?.startsWith('Analysis failed')
-            )
-              throw parseErr;
+          const data = JSON.parse(line.slice(6));
+          if (eventType === 'status' && onStatus) {
+            onStatus(data.message);
+          } else if (eventType === 'result') {
+            result = data;
+          } else if (eventType === 'error') {
+            throw new AnalysisStreamError(data.error || 'Analysis failed');
           }
           eventType = null;
         }
       }
     }
   } catch (streamErr) {
+    if (streamErr instanceof AnalysisStreamError) throw streamErr;
+    if (streamErr.name === 'AbortError') throw new Error('Analysis timed out');
     if (result) return result;
     throw streamErr;
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (!result) throw new Error('No analysis result received');

@@ -1,5 +1,5 @@
 import enum
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Column,
@@ -15,6 +15,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, relationship
+
+
+def _utcnow_naive() -> datetime:
+    """Naive UTC timestamp for DateTime columns (no tz info stored)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Base(DeclarativeBase):
@@ -48,7 +53,7 @@ class EarningsEvent(Base):
     eps_estimate = Column(Float, nullable=True)
     revenue_estimate = Column(Float, nullable=True)
     market_cap = Column(Float, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_utcnow_naive, nullable=False)
 
     analyses = relationship("EarningsAnalysis", back_populates="earnings_event")
 
@@ -73,7 +78,7 @@ class EarningsAnalysis(Base):
     sentiment_score = Column(Float, nullable=True)
     price_reaction_pct = Column(Float, nullable=True)
     raw_analysis = Column(JSONB, nullable=True)
-    analyzed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    analyzed_at = Column(DateTime, default=_utcnow_naive, nullable=False)
 
     earnings_event = relationship("EarningsEvent", back_populates="analyses")
 
@@ -88,4 +93,4 @@ class UserFavorite(Base):
     clerk_user_id = Column(String(255), nullable=False, index=True)
     ticker = Column(String(10), nullable=False, index=True)
     company_name = Column(String(255), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=_utcnow_naive, nullable=False)

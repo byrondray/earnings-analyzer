@@ -1,9 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.db.models import EarningsAnalysis, Sentiment
+from app.db.models import EarningsAnalysis, Sentiment, _utcnow_naive
 from app.services.analysis import get_cached_analysis
 from app.services.cache import ANALYSIS_UNREPORTED_TTL
 
@@ -38,7 +38,7 @@ def _mock_db(analysis_obj):
 class TestGetCachedAnalysisStaleness:
     @pytest.mark.asyncio
     async def test_reported_analysis_is_never_stale(self):
-        old_time = datetime.utcnow() - timedelta(days=10)
+        old_time = _utcnow_naive() - timedelta(days=10)
         analysis = _make_analysis(has_reported=True, analyzed_at=old_time)
         db = _mock_db(analysis)
 
@@ -49,7 +49,7 @@ class TestGetCachedAnalysisStaleness:
 
     @pytest.mark.asyncio
     async def test_unreported_analysis_fresh_within_ttl(self):
-        recent_time = datetime.utcnow() - timedelta(hours=1)
+        recent_time = _utcnow_naive() - timedelta(hours=1)
         analysis = _make_analysis(has_reported=False, analyzed_at=recent_time)
         db = _mock_db(analysis)
 
@@ -60,7 +60,7 @@ class TestGetCachedAnalysisStaleness:
 
     @pytest.mark.asyncio
     async def test_unreported_analysis_stale_after_ttl(self):
-        old_time = datetime.utcnow() - timedelta(seconds=ANALYSIS_UNREPORTED_TTL + 60)
+        old_time = _utcnow_naive() - timedelta(seconds=ANALYSIS_UNREPORTED_TTL + 60)
         analysis = _make_analysis(has_reported=False, analyzed_at=old_time)
         db = _mock_db(analysis)
 
@@ -79,7 +79,7 @@ class TestGetCachedAnalysisStaleness:
 
     @pytest.mark.asyncio
     async def test_unreported_at_exact_ttl_boundary_is_stale(self):
-        boundary_time = datetime.utcnow() - timedelta(seconds=ANALYSIS_UNREPORTED_TTL)
+        boundary_time = _utcnow_naive() - timedelta(seconds=ANALYSIS_UNREPORTED_TTL)
         analysis = _make_analysis(has_reported=False, analyzed_at=boundary_time)
         db = _mock_db(analysis)
 

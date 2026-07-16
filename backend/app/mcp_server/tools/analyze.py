@@ -226,7 +226,7 @@ async def analyze_earnings(ticker: str, earnings_data: str, event_context: dict 
         company_hint = f" ({event_context['company_name']})"
 
     response = await client.messages.create(
-        model="claude-sonnet-5",
+        model=settings.ANTHROPIC_ANALYSIS_MODEL,
         max_tokens=4096,
         system=f"{SYSTEM_PROMPT}\n\nToday's date: {date.today().isoformat()}",
         tools=[ANALYSIS_TOOL],
