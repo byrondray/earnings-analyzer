@@ -1,7 +1,7 @@
 import logging
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from app.auth import get_current_user
 from app.config import get_settings
 from app.db.database import get_db
 from app.db.models import EarningsEvent, ReportTime
+from app.rate_limit import limiter
 from app.services.cache import (
     get_cached_highlights, set_cached_highlights,
     get_cached_sparkline, set_cached_sparkline,
@@ -83,7 +84,9 @@ class SearchResponse(BaseModel):
 
 
 @router.get("/search", response_model=SearchResponse)
+@limiter.limit("30/minute")
 async def search_stock(
+    request: Request,
     ticker: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
@@ -251,7 +254,8 @@ async def get_highlights(
 
 
 @router.get("/sparkline/{ticker}")
-async def get_sparkline(ticker: str):
+@limiter.limit("60/minute")
+async def get_sparkline(request: Request, ticker: str):
     upper = validate_ticker(ticker)
 
     cached = await get_cached_sparkline(upper)
@@ -265,7 +269,8 @@ async def get_sparkline(ticker: str):
 
 
 @router.get("/sparklines")
-async def get_sparklines(tickers: list[str] = Query(..., alias="t")):
+@limiter.limit("30/minute")
+async def get_sparklines(request: Request, tickers: list[str] = Query(..., alias="t")):
     if len(tickers) > MAX_TICKERS_PER_REQUEST:
         raise HTTPException(
             status_code=422,

@@ -1,11 +1,12 @@
 import logging
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 import httpx
 
 from app.config import get_settings
+from app.rate_limit import limiter
 from app.services.cache import get_cached, set_cached
 from app.validation import validate_ticker
 
@@ -33,7 +34,9 @@ def _sort_by_date_desc(articles: list[dict]) -> list[dict]:
 
 
 @router.get("/{ticker}")
+@limiter.limit("60/minute")
 async def get_stock_news(
+    request: Request,
     ticker: str,
     days: int = Query(default=30, ge=1, le=90),
 ):

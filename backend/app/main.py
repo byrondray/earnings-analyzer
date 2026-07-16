@@ -9,10 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, PlainTextResponse, Response
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db, get_engine
-from app.db.models import Base
+from app.rate_limit import limiter
 from app.routers import analysis, calendar, chart, favorites, news, public_pages
 from app.services.cache import close_redis
 
@@ -22,11 +26,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Schema is managed by Alembic migrations (`alembic upgrade head`), run as
+    # part of deployment. This just waits for the DB to become reachable.
     engine = get_engine()
     for attempt in range(5):
         try:
             async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
+                await conn.execute(text("SELECT 1"))
             break
         except Exception as exc:
             if attempt == 4:
@@ -45,6 +51,11 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 
 def _get_cors_origins() -> list[str]:
     extra = os.environ.get("CORS_ORIGINS", "")

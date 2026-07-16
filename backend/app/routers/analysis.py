@@ -1,12 +1,13 @@
 import json
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.db.database import get_db
+from app.rate_limit import limiter
 from app.services.analysis import run_analysis_streaming, get_cached_analysis
 from app.validation import validate_ticker as _validate_ticker
 
@@ -27,7 +28,9 @@ def _sse_event(event: str, data: dict) -> str:
 
 
 @router.post("/{ticker}")
+@limiter.limit("10/hour")
 async def analyze_ticker(
+    request: Request,
     ticker: str,
     quarter: str = Query(..., description="Fiscal quarter, e.g. Q4-2025"),
     user_id: str = Depends(get_current_user),

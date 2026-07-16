@@ -244,6 +244,37 @@ async def set_cached(key: str, value: Any, ttl: int = 3600):
         pass
 
 
+def _analysis_lock_key(ticker: str, quarter: str) -> str:
+    return f"earnings:analysis_lock:{ticker.upper()}:{quarter}"
+
+
+ANALYSIS_LOCK_TTL = 90  # seconds; generous upper bound for search + Claude call
+
+
+async def acquire_analysis_lock(ticker: str, quarter: str) -> bool:
+    """Best-effort lock so concurrent requests for the same ticker/quarter
+    don't each pay for a separate Brave + Claude run. Returns True if the
+    caller acquired the lock (should proceed), False if another request is
+    already running it. No-ops (returns True) when Redis is unavailable."""
+    r = await get_redis()
+    if r is None:
+        return True
+    try:
+        return bool(await r.set(_analysis_lock_key(ticker, quarter), "1", nx=True, ex=ANALYSIS_LOCK_TTL))
+    except Exception:
+        return True
+
+
+async def release_analysis_lock(ticker: str, quarter: str):
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        await r.delete(_analysis_lock_key(ticker, quarter))
+    except Exception:
+        pass
+
+
 _AV_SYNC_KEY = "earnings:av_last_sync"
 
 

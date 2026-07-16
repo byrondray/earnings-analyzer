@@ -1,9 +1,10 @@
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 import httpx
 
+from app.rate_limit import limiter
 from app.services.cache import get_cached, set_cached
 from app.validation import validate_ticker
 
@@ -23,7 +24,9 @@ RANGE_MAP = {
 
 
 @router.get("/{ticker}")
+@limiter.limit("60/minute")
 async def get_chart_data(
+    request: Request,
     ticker: str,
     range: str = Query(default="1M", description="Timeframe: 1D, 5D, 1M, 3M, 6M, 1Y, 5Y"),
 ):
