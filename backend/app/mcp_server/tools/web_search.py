@@ -64,17 +64,22 @@ async def _fetch_page(client: httpx.AsyncClient, url: str, max_chars: int = _MAX
         return ""
 
 
-async def _search_brave(
+async def brave_get_with_retry(
     client: httpx.AsyncClient,
+    url: str,
     query: str,
     api_key: str,
     count: int = 5,
     max_retries: int = 3,
-) -> list[dict]:
+) -> dict | None:
+    """GET a Brave Search API endpoint with 429 retry/backoff.
+
+    Returns the parsed JSON body, or None if the request ultimately failed.
+    """
     backoff = 1.0
     for attempt in range(max_retries + 1):
         resp = await client.get(
-            BRAVE_SEARCH_URL,
+            url,
             params={"q": query, "count": count},
             headers={
                 "Accept": "application/json",
@@ -90,13 +95,25 @@ async def _search_brave(
             continue
         if resp.status_code == 429:
             logger.error("Brave rate limit exhausted after %d retries for query: %s", max_retries, query)
-            return []
+            return None
         if resp.status_code != 200:
             logger.error("Brave search failed with status %d for query: %s", resp.status_code, query)
-            return []
-        data = resp.json()
-        return data.get("web", {}).get("results", [])
-    return []
+            return None
+        return resp.json()
+    return None
+
+
+async def _search_brave(
+    client: httpx.AsyncClient,
+    query: str,
+    api_key: str,
+    count: int = 5,
+    max_retries: int = 3,
+) -> list[dict]:
+    data = await brave_get_with_retry(client, BRAVE_SEARCH_URL, query, api_key, count, max_retries)
+    if data is None:
+        return []
+    return data.get("web", {}).get("results", [])
 
 
 async def search_earnings_report(ticker: str, quarter: str, company_name: str | None = None) -> str:

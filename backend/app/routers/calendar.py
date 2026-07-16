@@ -159,6 +159,7 @@ async def get_prev_week(
 
 
 _HIGHLIGHTS_LIMIT = 10
+_EMPTY_SPARKLINE_TTL = 30 * 60  # 30 minutes; short TTL for tickers with no data
 
 
 @router.get("/highlights", response_model=HighlightsResponse)
@@ -294,8 +295,12 @@ async def get_sparklines(request: Request, tickers: list[str] = Query(..., alias
         tasks = [_fetch_sparkline_yahoo(t) for t in to_fetch]
         fetched = await asyncio.gather(*tasks, return_exceptions=True)
         for t, prices in zip(to_fetch, fetched):
-            if isinstance(prices, Exception) or not prices:
+            if isinstance(prices, Exception):
+                logger.warning("Sparkline fetch failed for %s: %s", t, prices)
                 result[t] = []
+            elif not prices:
+                result[t] = []
+                await set_cached_sparkline(t, [], ttl=_EMPTY_SPARKLINE_TTL)
             else:
                 result[t] = prices
                 await set_cached_sparkline(t, prices)
@@ -329,17 +334,16 @@ async def debug_source_check(
 
 
 async def _fetch_sparkline_yahoo(ticker: str) -> list[float]:
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
-    params = {"range": "1mo", "interval": "1d"}
-    headers = {"User-Agent": "Mozilla/5.0"}
+    from app.routers.chart import _fetch_yahoo_chart
+
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params=params, headers=headers)
-        data = resp.json()
-        closes = data["chart"]["result"][0]["indicators"]["quote"][0]["close"]
-        return [round(p, 2) for p in closes if p is not None]
+        data = await _fetch_yahoo_chart(ticker, "1mo", "1d")
+        closes = [p["c"] for p in data.get("points", []) if p.get("c") is not None]
+        if closes:
+            return closes
     except Exception:
-        logger.warning("Yahoo Finance failed for %s, trying Alpha Vantage", ticker)
+        pass
+    logger.warning("Yahoo Finance failed for %s, trying Alpha Vantage", ticker)
 
     settings = get_settings()
     params = {

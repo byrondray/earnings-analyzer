@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 FMP_PROFILE_URL = "https://financialmodelingprep.com/stable/profile"
 
-_CONCURRENT_LIMIT = 10
 _BATCH_SIZE = 20
 
 

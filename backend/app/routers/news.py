@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 import httpx
 
 from app.config import get_settings
+from app.mcp_server.tools.web_search import brave_get_with_retry
 from app.rate_limit import limiter
 from app.services.cache import get_cached, set_cached
 from app.validation import validate_ticker
@@ -99,21 +100,20 @@ async def _fetch_newsapi(ticker: str, days: int, api_key: str) -> list[dict]:
         return []
 
 
+BRAVE_NEWS_URL = "https://api.search.brave.com/res/v1/news/search"
+
+
 async def _fetch_brave_news(ticker: str, api_key: str) -> list[dict]:
     if not api_key:
         return []
 
-    url = "https://api.search.brave.com/res/v1/news/search"
-    params = {"q": f"{ticker} stock earnings", "count": 15}
-    headers = {
-        "Accept": "application/json",
-        "Accept-Encoding": "gzip",
-        "X-Subscription-Token": api_key,
-    }
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(url, params=params, headers=headers)
-        data = resp.json()
+            data = await brave_get_with_retry(
+                client, BRAVE_NEWS_URL, f"{ticker} stock earnings", api_key, count=15
+            )
+        if data is None:
+            return []
         results = data.get("results", [])
         return [
             {

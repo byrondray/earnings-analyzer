@@ -47,30 +47,11 @@ def _market_cap_key(ticker: str) -> str:
 
 
 async def get_cached_calendar(week_start: str) -> list[dict] | None:
-    r = await get_redis()
-    if r is None:
-        return None
-    try:
-        data = await r.get(_calendar_key(week_start))
-        if data:
-            return json.loads(data)
-    except Exception:
-        pass
-    return None
+    return await get_cached(_calendar_key(week_start))
 
 
 async def set_cached_calendar(week_start: str, events: list[dict]):
-    r = await get_redis()
-    if r is None:
-        return
-    try:
-        await r.setex(
-            _calendar_key(week_start),
-            EARNINGS_CALENDAR_TTL,
-            json.dumps(events),
-        )
-    except Exception:
-        pass
+    await set_cached(_calendar_key(week_start), events, ttl=EARNINGS_CALENDAR_TTL)
 
 
 async def get_cached_market_cap(ticker: str) -> float | None:
@@ -207,14 +188,14 @@ async def get_cached_sparkline(ticker: str) -> list[float] | None:
     return None
 
 
-async def set_cached_sparkline(ticker: str, prices: list[float]):
+async def set_cached_sparkline(ticker: str, prices: list[float], ttl: int = SPARKLINE_TTL):
     r = await get_redis()
     if r is None:
         return
     try:
         await r.setex(
             _sparkline_key(ticker),
-            SPARKLINE_TTL,
+            ttl,
             json.dumps(prices),
         )
     except Exception:
