@@ -95,7 +95,9 @@ class TestMarketCapCache:
     @patch("app.services.cache.get_redis")
     async def test_set_many_cached_market_caps(self, mock_get_redis):
         mock_redis = AsyncMock()
-        mock_pipe = AsyncMock()
+        mock_pipe = MagicMock()
+        mock_pipe.setex = MagicMock()
+        mock_pipe.execute = AsyncMock()
         mock_redis.pipeline = MagicMock(return_value=mock_pipe)
         mock_get_redis.return_value = mock_redis
 

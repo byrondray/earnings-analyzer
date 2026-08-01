@@ -15,8 +15,6 @@ logger = logging.getLogger(__name__)
 
 FMP_PROFILE_URL = "https://financialmodelingprep.com/stable/profile"
 
-_BATCH_SIZE = 20
-
 
 async def _fetch_market_cap_from_api(
     ticker: str, client: httpx.AsyncClient | None = None
@@ -62,30 +60,17 @@ async def fetch_market_caps_batch(tickers: list[str]) -> dict[str, float | None]
     missing = [t for t in unique_tickers if cached[t] is None]
 
     if missing:
-        settings = get_settings()
-        batches = [missing[i:i + _BATCH_SIZE] for i in range(0, len(missing), _BATCH_SIZE)]
-        logger.info("Fetching market caps for %d tickers in %d batch(es)", len(missing), len(batches))
-
+        # FMP's /stable/profile endpoint takes a single symbol per request
+        # (unlike the legacy /v3/profile/{symbols} endpoint, it does not
+        # accept a comma-separated symbol list), so fetch each concurrently.
+        logger.info("Fetching market caps for %d tickers", len(missing))
         async with httpx.AsyncClient(timeout=10.0) as client:
-            for batch in batches:
-                symbol_str = ",".join(batch)
-                try:
-                    resp = await client.get(
-                        FMP_PROFILE_URL,
-                        params={"symbol": symbol_str, "apikey": settings.FMP_API_KEY},
-                    )
-                    if resp.status_code != 200:
-                        logger.warning("FMP batch request failed with %d", resp.status_code)
-                        continue
-                    data = resp.json()
-                    if isinstance(data, list):
-                        for profile in data:
-                            t = profile.get("symbol", "").upper()
-                            cap = profile.get("marketCap")
-                            if t and cap is not None:
-                                cached[t] = cap
-                except Exception as e:
-                    logger.warning("FMP batch fetch error: %s", e)
+            results = await asyncio.gather(
+                *(_fetch_market_cap_from_api(t, client) for t in missing)
+            )
+        for t, cap in zip(missing, results):
+            if cap is not None:
+                cached[t] = cap
 
         to_cache = {t: cached[t] for t in missing if cached[t] is not None}
         if to_cache:

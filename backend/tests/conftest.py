@@ -5,7 +5,35 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient, ASGITransport
 
+from app.auth import get_current_user, get_optional_user
 from app.main import app
+
+TEST_USER_ID = "user_test123"
+
+
+@pytest.fixture(autouse=True)
+def _no_live_redis(monkeypatch):
+    """Tests must not talk to a real Redis instance (the root .env points at
+    a live deployment). Clearing REDIS_URL makes app.services.cache no-op
+    cleanly instead of attempting (and failing) a live connection."""
+    from app.config import get_settings
+    from app.services import cache as cache_module
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("REDIS_URL", "")
+    cache_module._redis_client = None
+    yield
+    cache_module._redis_client = None
+    get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _override_auth():
+    app.dependency_overrides[get_current_user] = lambda: TEST_USER_ID
+    app.dependency_overrides[get_optional_user] = lambda: TEST_USER_ID
+    yield
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_optional_user, None)
 
 
 @pytest.fixture(scope="session")

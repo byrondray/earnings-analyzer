@@ -38,7 +38,7 @@ class TestCalendarWeekEndpoint:
 
         data = response.json()
         assert data["week_start"] == "2026-02-16"
-        assert data["week_end"] == "2026-02-20"
+        assert data["week_end"] == "2026-02-22"
 
     @pytest.mark.asyncio
     async def test_get_week_defaults_to_today(self, async_client):
@@ -67,7 +67,7 @@ class TestCalendarNextPrevEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["week_start"] == "2026-02-23"
-        assert data["week_end"] == "2026-02-27"
+        assert data["week_end"] == "2026-03-01"
 
     @pytest.mark.asyncio
     async def test_prev_week_returns_200(self, async_client):
@@ -83,7 +83,7 @@ class TestCalendarNextPrevEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["week_start"] == "2026-02-09"
-        assert data["week_end"] == "2026-02-13"
+        assert data["week_end"] == "2026-02-15"
 
 
 def _make_event(ticker, report_date, market_cap=None):

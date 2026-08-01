@@ -93,7 +93,7 @@ class TestSearchEarningsReport:
         assert "X-Subscription-Token" in headers
 
     @pytest.mark.asyncio
-    async def test_limits_to_five_results(self):
+    async def test_limits_to_eight_results(self):
         many_results = {
             "web": {
                 "results": [
@@ -117,5 +117,5 @@ class TestSearchEarningsReport:
             result = await search_earnings_report("AAPL", "Q4-2025")
 
         assert "Result 0" in result
-        assert "Result 4" in result
-        assert "Result 5" not in result
+        assert "Result 7" in result
+        assert "Result 8" not in result
