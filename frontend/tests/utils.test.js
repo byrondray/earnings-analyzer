@@ -54,11 +54,13 @@ describe('groupByDate', () => {
 });
 
 describe('getDaysOfWeek', () => {
-  it('returns 5 consecutive days starting from week start', () => {
+  it('returns 7 consecutive days starting from week start, including the weekend', () => {
     const days = getDaysOfWeek('2026-02-16');
-    expect(days).toHaveLength(5);
+    expect(days).toHaveLength(7);
     expect(days[0]).toBe('2026-02-16');
     expect(days[4]).toBe('2026-02-20');
+    expect(days[5]).toBe('2026-02-21');
+    expect(days[6]).toBe('2026-02-22');
   });
 });
 

@@ -45,7 +45,7 @@ export function toLocalDateKey(d) {
 export function getDaysOfWeek(weekStart) {
   const days = [];
   const start = new Date(weekStart + 'T00:00:00');
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 7; i++) {
     const d = new Date(start);
     d.setDate(start.getDate() + i);
     days.push(toLocalDateKey(d));

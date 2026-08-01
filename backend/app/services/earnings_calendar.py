@@ -195,7 +195,7 @@ async def _fetch_historical_earnings_nasdaq(
         current += timedelta(days=1)
 
     sem = asyncio.Semaphore(_NASDAQ_FETCH_CONCURRENCY)
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, http2=True) as client:
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
         per_date_results = await asyncio.gather(
             *(_fetch_nasdaq_rows_for_date(client, sem, d) for d in dates)
         )

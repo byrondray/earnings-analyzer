@@ -87,8 +87,8 @@
   {/if}
 
   {#if loading}
-    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-      {#each Array(5) as _, i}
+    <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
+      {#each Array(7) as _, i}
         <div class="bg-surface-card rounded-2xl h-75 animate-[pulse-skeleton_1.5s_ease-in-out_infinite] border border-border-subtle"></div>
       {/each}
     </div>
@@ -98,7 +98,7 @@
       <button class="mt-4 px-5 py-2.5 bg-accent-green text-white border-none rounded-2xl cursor-pointer font-semibold transition-all duration-200 hover:brightness-110" onclick={() => loadWeek(currentDate)}>Retry</button>
     </div>
   {:else}
-    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
       {#each days as day}
         <DayColumn dateStr={day} events={grouped[day] || []} {onShowAnalysis} {onError} {user} {favorites} {onFavoriteChange} />
       {/each}
