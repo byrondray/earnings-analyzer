@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.db.models import EarningsEvent, ReportTime
-from app.routers.news import get_stock_news
+from app.routers.news import fetch_stock_news
 from app.services.analysis import get_cached_analysis
 from app.services.earnings_calendar import (
     fetch_recent_fallback_events,
@@ -134,8 +134,7 @@ def _build_news_item(article: dict):
 
 
 async def _fetch_public_news_articles(ticker: str):
-    response = await get_stock_news(ticker=ticker, days=_PUBLIC_NEWS_DAYS)
-    payload = json.loads(response.body.decode("utf-8"))
+    payload = await fetch_stock_news(ticker, days=_PUBLIC_NEWS_DAYS)
     articles = payload.get("articles") or []
     return articles[:_PUBLIC_NEWS_LIMIT]
 

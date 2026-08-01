@@ -34,19 +34,13 @@ def _sort_by_date_desc(articles: list[dict]) -> list[dict]:
     return sorted(articles, key=lambda a: _parse_date(a.get("publishedAt", "")), reverse=True)
 
 
-@router.get("/{ticker}")
-@limiter.limit("60/minute")
-async def get_stock_news(
-    request: Request,
-    ticker: str,
-    days: int = Query(default=30, ge=1, le=90),
-):
+async def fetch_stock_news(ticker: str, days: int = 30) -> dict:
     upper = validate_ticker(ticker)
     cache_key = f"news:{upper}:{days}"
 
     cached = await get_cached(cache_key)
     if cached is not None:
-        return JSONResponse(cached)
+        return cached
 
     settings = get_settings()
     articles = []
@@ -61,6 +55,17 @@ async def get_stock_news(
 
     result = {"ticker": upper, "articles": articles}
     await set_cached(cache_key, result, ttl=3600)
+    return result
+
+
+@router.get("/{ticker}")
+@limiter.limit("60/minute")
+async def get_stock_news(
+    request: Request,
+    ticker: str,
+    days: int = Query(default=30, ge=1, le=90),
+):
+    result = await fetch_stock_news(ticker, days)
     return JSONResponse(result)
 
 
