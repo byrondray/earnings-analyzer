@@ -315,6 +315,8 @@ async def debug_source_check(
     target_date: date = Query(default=None, alias="date"),
     user_id: str = Depends(get_current_user),
 ):
+    if not get_settings().ENABLE_DEBUG_ENDPOINTS:
+        raise HTTPException(status_code=404, detail="Not found")
     if target_date is None:
         target_date = date.today()
     week_start, week_end_base = week_bounds(target_date)

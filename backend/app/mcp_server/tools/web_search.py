@@ -124,9 +124,10 @@ async def search_earnings_report(ticker: str, quarter: str, company_name: str | 
     reaction_query = f"{ticker} {quarter} earnings stock price reaction after-hours"
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        press_results = await _search_brave(client, press_release_query, settings.BRAVE_SEARCH_API_KEY, count=5)
-        await asyncio.sleep(1.1)
-        reaction_results = await _search_brave(client, reaction_query, settings.BRAVE_SEARCH_API_KEY, count=3)
+        press_results, reaction_results = await asyncio.gather(
+            _search_brave(client, press_release_query, settings.BRAVE_SEARCH_API_KEY, count=5),
+            _search_brave(client, reaction_query, settings.BRAVE_SEARCH_API_KEY, count=3),
+        )
 
     all_results = press_results + reaction_results
     if not all_results:

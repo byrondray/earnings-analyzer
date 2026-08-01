@@ -1,9 +1,12 @@
 import json
+import logging
 from typing import Any
 
 import redis.asyncio as redis
 
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 _redis_client: redis.Redis | None = None
 
@@ -47,7 +50,7 @@ async def get_cached(key: str) -> Any | None:
         if data:
             return json.loads(data)
     except Exception:
-        pass
+        logger.warning("Redis get failed for key %s", key, exc_info=True)
     return None
 
 
@@ -58,7 +61,7 @@ async def set_cached(key: str, value: Any, ttl: int = 3600):
     try:
         await r.setex(key, ttl, json.dumps(value, default=str))
     except Exception:
-        pass
+        logger.warning("Redis set failed for key %s", key, exc_info=True)
 
 
 def _calendar_key(week_start: str) -> str:
@@ -98,6 +101,7 @@ async def get_many_cached_market_caps(tickers: list[str]) -> dict[str, float | N
             result[ticker] = float(val) if val else None
         return result
     except Exception:
+        logger.warning("Redis mget failed for %d tickers", len(tickers), exc_info=True)
         return {t: None for t in tickers}
 
 
@@ -111,7 +115,7 @@ async def set_many_cached_market_caps(caps: dict[str, float]):
             pipe.setex(_market_cap_key(ticker), MARKET_CAP_TTL, str(cap))
         await pipe.execute()
     except Exception:
-        pass
+        logger.warning("Redis pipeline set failed for %d tickers", len(caps), exc_info=True)
 
 
 def _analysis_key(ticker: str, quarter: str) -> str:
@@ -157,28 +161,47 @@ def _analysis_lock_key(ticker: str, quarter: str) -> str:
 ANALYSIS_LOCK_TTL = 90  # seconds; generous upper bound for search + Claude call
 
 
+_local_analysis_locks: set[str] = set()
+
+
 async def acquire_analysis_lock(ticker: str, quarter: str) -> bool:
     """Best-effort lock so concurrent requests for the same ticker/quarter
     don't each pay for a separate Brave + Claude run. Returns True if the
     caller acquired the lock (should proceed), False if another request is
-    already running it. No-ops (returns True) when Redis is unavailable."""
+    already running it.
+
+    Normally backed by Redis (works across processes/instances). When Redis
+    is unavailable, falls back to an in-process lock set so a Redis outage
+    at least prevents duplicate paid API calls within a single instance,
+    rather than silently disabling the lock entirely."""
+    key = _analysis_lock_key(ticker, quarter)
     r = await get_redis()
     if r is None:
-        return True
+        return _acquire_local_analysis_lock(key)
     try:
-        return bool(await r.set(_analysis_lock_key(ticker, quarter), "1", nx=True, ex=ANALYSIS_LOCK_TTL))
+        return bool(await r.set(key, "1", nx=True, ex=ANALYSIS_LOCK_TTL))
     except Exception:
-        return True
+        logger.warning("Redis lock acquisition failed, falling back to in-process lock for %s", key)
+        return _acquire_local_analysis_lock(key)
 
 
 async def release_analysis_lock(ticker: str, quarter: str):
+    key = _analysis_lock_key(ticker, quarter)
+    _local_analysis_locks.discard(key)
     r = await get_redis()
     if r is None:
         return
     try:
-        await r.delete(_analysis_lock_key(ticker, quarter))
+        await r.delete(key)
     except Exception:
-        pass
+        logger.warning("Redis lock release failed for %s", key)
+
+
+def _acquire_local_analysis_lock(key: str) -> bool:
+    if key in _local_analysis_locks:
+        return False
+    _local_analysis_locks.add(key)
+    return True
 
 
 _AV_SYNC_KEY = "earnings:av_last_sync"

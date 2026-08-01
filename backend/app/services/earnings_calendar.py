@@ -128,62 +128,79 @@ def _parse_nasdaq_eps_forecast(raw: str | None) -> float | None:
     return _safe_float(cleaned)
 
 
+_NASDAQ_FETCH_CONCURRENCY = 3
+
+
+async def _fetch_nasdaq_rows_for_date(
+    client: httpx.AsyncClient, sem: asyncio.Semaphore, d: date
+) -> list[dict]:
+    async with sem:
+        rows = []
+        for attempt in range(2):
+            try:
+                resp = await client.get(
+                    NASDAQ_EARNINGS_URL,
+                    params={
+                        "date": d.isoformat(),
+                        "offset": 0,
+                        "limit": 1000,
+                    },
+                    headers=NASDAQ_HEADERS,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    rows = data.get("data", {}).get("rows") or []
+                    break
+                logger.warning(
+                    "Nasdaq earnings fetch failed for %s (status=%d, attempt=%d)",
+                    d,
+                    resp.status_code,
+                    attempt + 1,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Nasdaq earnings fetch exception for %s (attempt=%d): %s",
+                    d,
+                    attempt + 1,
+                    e,
+                )
+            if attempt == 0:
+                await asyncio.sleep(0.35)
+
+    results = []
+    for row in rows:
+        symbol = row.get("symbol", "")
+        if not symbol:
+            continue
+        results.append({
+            "symbol": symbol,
+            "companyName": row.get("name", symbol),
+            "date": d.isoformat(),
+            "time": "",
+            "fiscalDateEnding": _normalize_fiscal_quarter(row.get("fiscalQuarterEnding")),
+            "epsEstimated": _parse_nasdaq_eps_forecast(row.get("epsForecast")),
+            "marketCap": _parse_nasdaq_market_cap(row.get("marketCap")),
+        })
+    return results
+
+
 async def _fetch_historical_earnings_nasdaq(
     start: date, end: date
 ) -> list[dict]:
-    results = []
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, http2=True) as client:
-        current = start
-        while current <= end:
-            if current.weekday() >= 5:
-                current += timedelta(days=1)
-                continue
-            rows = []
-            for attempt in range(2):
-                try:
-                    resp = await client.get(
-                        NASDAQ_EARNINGS_URL,
-                        params={
-                            "date": current.isoformat(),
-                            "offset": 0,
-                            "limit": 1000,
-                        },
-                        headers=NASDAQ_HEADERS,
-                    )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        rows = data.get("data", {}).get("rows") or []
-                        break
-                    logger.warning(
-                        "Nasdaq earnings fetch failed for %s (status=%d, attempt=%d)",
-                        current,
-                        resp.status_code,
-                        attempt + 1,
-                    )
-                except Exception as e:
-                    logger.warning(
-                        "Nasdaq earnings fetch exception for %s (attempt=%d): %s",
-                        current,
-                        attempt + 1,
-                        e,
-                    )
-                if attempt == 0:
-                    await asyncio.sleep(0.35)
+    dates = []
+    current = start
+    while current <= end:
+        if current.weekday() < 5:
+            dates.append(current)
+        current += timedelta(days=1)
 
-            for row in rows:
-                symbol = row.get("symbol", "")
-                if not symbol:
-                    continue
-                results.append({
-                    "symbol": symbol,
-                    "companyName": row.get("name", symbol),
-                    "date": current.isoformat(),
-                    "time": "",
-                    "fiscalDateEnding": _normalize_fiscal_quarter(row.get("fiscalQuarterEnding")),
-                    "epsEstimated": _parse_nasdaq_eps_forecast(row.get("epsForecast")),
-                    "marketCap": _parse_nasdaq_market_cap(row.get("marketCap")),
-                })
-            current += timedelta(days=1)
+    sem = asyncio.Semaphore(_NASDAQ_FETCH_CONCURRENCY)
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, http2=True) as client:
+        per_date_results = await asyncio.gather(
+            *(_fetch_nasdaq_rows_for_date(client, sem, d) for d in dates)
+        )
+
+    results = [row for rows in per_date_results for row in rows]
     logger.info(
         "Nasdaq historical fetch completed for %s..%s with %d rows",
         start,
@@ -270,13 +287,19 @@ async def upsert_earnings_events(
         return []
 
     rows = []
+    dropped = 0
+    truncated = 0
     for item in events_data:
         symbol = (item.get("symbol") or "").strip().upper()
         if not symbol or not item.get("date") or len(symbol) > 10:
+            dropped += 1
             continue
+        company_name = item.get("companyName", symbol)
+        if len(company_name) > 255:
+            truncated += 1
         row = {
             "ticker": symbol,
-            "company_name": item.get("companyName", symbol)[:255],
+            "company_name": company_name[:255],
             "report_date": date.fromisoformat(item["date"]),
             "report_time": _map_report_time(item.get("time")),
             "fiscal_quarter": item.get("fiscalDateEnding"),
@@ -286,6 +309,11 @@ async def upsert_earnings_events(
         if item.get("marketCap") is not None:
             row["market_cap"] = item["marketCap"]
         rows.append(row)
+
+    if dropped:
+        logger.warning("upsert_earnings_events: dropped %d of %d rows (missing/invalid symbol or date)", dropped, len(events_data))
+    if truncated:
+        logger.warning("upsert_earnings_events: truncated company_name for %d rows exceeding 255 chars", truncated)
 
     if not rows:
         return []
@@ -323,6 +351,26 @@ logger = logging.getLogger(__name__)
 _ENRICH_TIMEOUT = 30
 
 
+async def _fetch_nasdaq_market_caps_for_date(client: httpx.AsyncClient, d: date) -> dict[str, float]:
+    caps: dict[str, float] = {}
+    try:
+        resp = await client.get(
+            NASDAQ_EARNINGS_URL,
+            params={"date": d.isoformat()},
+            headers=NASDAQ_HEADERS,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            for row in data.get("data", {}).get("rows") or []:
+                symbol = row.get("symbol", "")
+                mcap = _parse_nasdaq_market_cap(row.get("marketCap"))
+                if symbol and mcap is not None:
+                    caps[symbol] = mcap
+    except Exception as e:
+        logger.warning("Nasdaq market cap fetch failed for %s: %s", d, e)
+    return caps
+
+
 async def _enrich_market_caps_from_nasdaq(
     db: AsyncSession, events: list[EarningsEvent]
 ) -> list[EarningsEvent]:
@@ -330,29 +378,16 @@ async def _enrich_market_caps_from_nasdaq(
     if not needs_cap:
         return events
 
-    dates_to_fetch = list(dict.fromkeys(e.report_date for e in needs_cap))
+    dates_to_fetch = [d for d in dict.fromkeys(e.report_date for e in needs_cap) if d.weekday() < 5]
     logger.info("Enriching market caps from Nasdaq for %d dates", len(dates_to_fetch))
 
     caps: dict[str, float] = {}
     async with httpx.AsyncClient(timeout=15.0) as client:
-        for d in dates_to_fetch:
-            if d.weekday() >= 5:
-                continue
-            try:
-                resp = await client.get(
-                    NASDAQ_EARNINGS_URL,
-                    params={"date": d.isoformat()},
-                    headers=NASDAQ_HEADERS,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    for row in data.get("data", {}).get("rows") or []:
-                        symbol = row.get("symbol", "")
-                        mcap = _parse_nasdaq_market_cap(row.get("marketCap"))
-                        if symbol and mcap is not None:
-                            caps[symbol] = mcap
-            except Exception as e:
-                logger.warning("Nasdaq market cap fetch failed for %s: %s", d, e)
+        results = await asyncio.gather(
+            *(_fetch_nasdaq_market_caps_for_date(client, d) for d in dates_to_fetch)
+        )
+        for result in results:
+            caps.update(result)
 
     updated = 0
     for event in events:

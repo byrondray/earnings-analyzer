@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     CLERK_SECRET_KEY: str = ""
     CLERK_JWKS_URL: str = ""
     CORS_ORIGINS: str = ""
+    ENABLE_DEBUG_ENDPOINTS: bool = False
 
     model_config = {
         "env_file": _find_env_file(),

@@ -21,7 +21,10 @@ def get_engine():
     if _engine is None:
         settings = get_settings()
         _async_url = _build_async_url(settings.DATABASE_URL)
-        is_railway = bool(os.environ.get("RAILWAY_ENVIRONMENT"))
+        # Only disable SSL for an explicit local/dev opt-out. Defaulting to
+        # SSL-off whenever RAILWAY_ENVIRONMENT happens to be unset would
+        # silently send DB traffic in plaintext on any other deploy target.
+        is_local = os.environ.get("DB_SSL_DISABLE", "").lower() in ("1", "true")
         _engine = create_async_engine(
             _async_url,
             echo=False,
@@ -29,7 +32,7 @@ def get_engine():
             max_overflow=5,
             pool_pre_ping=True,
             pool_recycle=300,
-            connect_args={} if is_railway else {"ssl": False},
+            connect_args={"ssl": False} if is_local else {},
         )
     return _engine
 

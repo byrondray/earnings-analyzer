@@ -213,10 +213,10 @@ def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
 
 
 async def run_analysis_streaming(
-    db: AsyncSession, ticker: str, quarter: str
+    ticker: str, quarter: str
 ) -> AsyncGenerator[tuple[str, dict], None]:
     try:
-        async for event_type, payload in _run_analysis_streaming_inner(db, ticker, quarter):
+        async for event_type, payload in _run_analysis_streaming_inner(ticker, quarter):
             yield (event_type, payload)
     except Exception as e:
         logger.exception("Analysis streaming failed for %s %s", ticker, quarter)
@@ -228,7 +228,7 @@ _LOCK_POLL_MAX_ATTEMPTS = 45  # ~90s, matches ANALYSIS_LOCK_TTL
 
 
 async def _run_analysis_streaming_inner(
-    db: AsyncSession, ticker: str, quarter: str
+    ticker: str, quarter: str
 ) -> AsyncGenerator[tuple[str, dict], None]:
     from app.services.cache import (
         get_cached_analysis_redis,
@@ -257,7 +257,7 @@ async def _run_analysis_streaming_inner(
         return
 
     try:
-        async for event in _run_analysis_with_lock(db, ticker, quarter):
+        async for event in _run_analysis_with_lock(ticker, quarter):
             yield event
     finally:
         await release_analysis_lock(ticker, quarter)
@@ -269,17 +269,21 @@ def _quarter_from_report_date(report_date: date) -> str:
 
 
 async def _run_analysis_with_lock(
-    db: AsyncSession, ticker: str, quarter: str
+    ticker: str, quarter: str
 ) -> AsyncGenerator[tuple[str, dict], None]:
     from app.services.cache import set_cached_analysis_redis
+    from app.db.database import get_session_factory
 
-    events_query = (
-        select(EarningsEvent)
-        .where(EarningsEvent.ticker == ticker.upper())
-        .order_by(EarningsEvent.report_date.desc())
-    )
-    events_result = await db.execute(events_query)
-    candidates = list(events_result.scalars().all())
+    factory = get_session_factory()
+
+    async with factory() as db:
+        events_query = (
+            select(EarningsEvent)
+            .where(EarningsEvent.ticker == ticker.upper())
+            .order_by(EarningsEvent.report_date.desc())
+        )
+        events_result = await db.execute(events_query)
+        candidates = list(events_result.scalars().all())
 
     event = next(
         (e for e in candidates if _quarter_from_report_date(e.report_date) == quarter),
@@ -288,6 +292,7 @@ async def _run_analysis_with_lock(
     if not event and candidates:
         event = candidates[0]
 
+    event_id = event.id if event else None
     event_context = None
     company_name = None
     if event:
@@ -317,21 +322,8 @@ async def _run_analysis_with_lock(
 
     yield ("status", {"step": "save", "message": "Saving results..."})
 
-    if event:
-        await db.execute(
-            delete(EarningsAnalysis).where(EarningsAnalysis.earnings_event_id == event.id)
-        )
-    else:
-        await db.execute(
-            delete(EarningsAnalysis).where(
-                EarningsAnalysis.earnings_event_id.is_(None),
-                EarningsAnalysis.ticker == ticker.upper(),
-                EarningsAnalysis.fiscal_quarter == quarter,
-            )
-        )
-
     earnings_analysis = EarningsAnalysis(
-        earnings_event_id=event.id if event else None,
+        earnings_event_id=event_id,
         ticker=ticker.upper(),
         fiscal_quarter=quarter,
         eps_estimate=analysis.get("eps_estimate"),
@@ -347,11 +339,31 @@ async def _run_analysis_with_lock(
         raw_analysis=analysis,
         analyzed_at=_utcnow_naive(),
     )
-    db.add(earnings_analysis)
-    await db.commit()
-    await db.refresh(earnings_analysis)
+
+    try:
+        async with factory() as db:
+            if event_id is not None:
+                await db.execute(
+                    delete(EarningsAnalysis).where(EarningsAnalysis.earnings_event_id == event_id)
+                )
+            else:
+                await db.execute(
+                    delete(EarningsAnalysis).where(
+                        EarningsAnalysis.earnings_event_id.is_(None),
+                        EarningsAnalysis.ticker == ticker.upper(),
+                        EarningsAnalysis.fiscal_quarter == quarter,
+                    )
+                )
+            db.add(earnings_analysis)
+            await db.commit()
+            await db.refresh(earnings_analysis)
+    except Exception:
+        logger.exception("Failed to persist analysis for %s %s", ticker, quarter)
+        yield ("error", {"error": "Failed to save analysis results"})
+        return
+
     analysis["id"] = earnings_analysis.id
-    analysis["earnings_event_id"] = event.id if event else None
+    analysis["earnings_event_id"] = event_id
 
     analysis["ticker"] = ticker.upper()
     analysis["quarter"] = quarter

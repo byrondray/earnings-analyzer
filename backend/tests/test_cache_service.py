@@ -241,12 +241,32 @@ class TestAnalysisLock:
     @pytest.mark.asyncio
     @patch("app.services.cache.get_redis")
     async def test_acquire_lock_handles_exception(self, mock_get_redis):
+        from app.services import cache as cache_module
+
+        cache_module._local_analysis_locks.discard("earnings:analysis_lock:AAPL:Q4-2025")
         mock_redis = AsyncMock()
         mock_redis.set = AsyncMock(side_effect=Exception("Connection refused"))
         mock_get_redis.return_value = mock_redis
 
         result = await acquire_analysis_lock("AAPL", "Q4-2025")
         assert result is True
+
+    @pytest.mark.asyncio
+    @patch("app.services.cache.get_redis")
+    async def test_acquire_lock_exception_blocks_concurrent_duplicate(self, mock_get_redis):
+        from app.services import cache as cache_module
+
+        cache_module._local_analysis_locks.discard("earnings:analysis_lock:AAPL:Q4-2025")
+        mock_redis = AsyncMock()
+        mock_redis.set = AsyncMock(side_effect=Exception("Connection refused"))
+        mock_get_redis.return_value = mock_redis
+
+        first = await acquire_analysis_lock("AAPL", "Q4-2025")
+        second = await acquire_analysis_lock("AAPL", "Q4-2025")
+        assert first is True
+        assert second is False
+
+        await release_analysis_lock("AAPL", "Q4-2025")
 
     @pytest.mark.asyncio
     @patch("app.services.cache.get_redis")

@@ -24,13 +24,12 @@ async def analyze_ticker(
     ticker: str,
     quarter: str = Query(..., description="Fiscal quarter, e.g. Q4-2025"),
     user_id: str = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
 ):
     clean_ticker = _validate_ticker(ticker)
     clean_quarter = _validate_quarter(quarter)
 
     async def stream():
-        async for event_type, payload in run_analysis_streaming(db, clean_ticker, clean_quarter):
+        async for event_type, payload in run_analysis_streaming(clean_ticker, clean_quarter):
             yield _sse_event(event_type, payload)
 
     return StreamingResponse(stream(), media_type="text/event-stream")
