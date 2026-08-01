@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 _MAX_PAGES = 3
 _PAGE_TIMEOUT = 8.0
 _MAX_CHARS_PER_PAGE = 6000
-_TOTAL_CHAR_LIMIT = 25000
+_TOTAL_CHAR_LIMIT = 45000
 
 _PRIMARY_SOURCE_DOMAINS = [
     "businesswire.com",
@@ -25,6 +25,24 @@ _PRIMARY_SOURCE_DOMAINS = [
     "ir.",
     "investors.",
 ]
+
+
+_SITE_SUFFIXES = (".com", ".gov", ".org", ".net", ".io")
+
+
+def _build_press_release_site_filter(domains: list[str]) -> str:
+    """Build a Brave `site:`/`inurl:` filter from _PRIMARY_SOURCE_DOMAINS so the
+    two stay in sync — real domains (ending in a known TLD, e.g.
+    "businesswire.com") become site: terms; bare substrings meant to match
+    anywhere in a URL (e.g. "investor", "ir.") become inurl: terms."""
+    terms = [
+        f"site:{d}" if d.endswith(_SITE_SUFFIXES) else f"inurl:{d.rstrip('.')}"
+        for d in domains
+    ]
+    return "(" + " OR ".join(terms) + ")"
+
+
+_PRESS_RELEASE_SITE_FILTER = _build_press_release_site_filter(_PRIMARY_SOURCE_DOMAINS)
 
 
 def _is_primary_source(url: str) -> bool:
@@ -116,32 +134,72 @@ async def _search_brave(
     return data.get("web", {}).get("results", [])
 
 
-async def search_earnings_report(ticker: str, quarter: str, company_name: str | None = None) -> str:
+_MONTH_ABBR = {
+    1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+    7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+}
+
+
+def _fiscal_quarter_label(fiscal_quarter_end: str | None) -> str | None:
+    """Convert an ISO fiscal-quarter-end date ('2026-06-30') to a company-style
+    fiscal label ('FY2026 Jun quarter') so queries can match how the company
+    phrases its own release, which often differs from the calendar-quarter
+    label used internally (e.g. Microsoft's fiscal Q4 ends in June, not
+    December). We deliberately don't guess a "Q1"-"Q4" number here — that
+    requires knowing the company's fiscal-year start, which this date alone
+    doesn't tell us, and a wrong quarter number would misdirect the search."""
+    if not fiscal_quarter_end:
+        return None
+    try:
+        year, month, _ = fiscal_quarter_end.split("-")
+        month_abbr = _MONTH_ABBR.get(int(month))
+        if not month_abbr:
+            return None
+        return f"FY{year} {month_abbr} quarter"
+    except (ValueError, IndexError):
+        return None
+
+
+async def search_earnings_report(
+    ticker: str,
+    quarter: str,
+    company_name: str | None = None,
+    fiscal_quarter_end: str | None = None,
+) -> str:
     settings = get_settings()
     name_part = f'"{company_name}"' if company_name and company_name != ticker else ticker
+    fiscal_label = _fiscal_quarter_label(fiscal_quarter_end)
+    quarter_terms = f"{quarter} {fiscal_label}" if fiscal_label else quarter
 
-    press_release_query = f"{name_part} {ticker} {quarter} earnings press release results"
-    reaction_query = f"{ticker} {quarter} earnings stock price reaction after-hours"
+    press_release_site_query = (
+        f"{name_part} {ticker} {quarter_terms} earnings results {_PRESS_RELEASE_SITE_FILTER}"
+    )
+    press_release_query = f"{name_part} {ticker} {quarter_terms} earnings press release results"
+    reaction_query = f"{ticker} {quarter_terms} earnings stock price reaction after-hours"
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        press_results, reaction_results = await asyncio.gather(
+        site_results, press_results, reaction_results = await asyncio.gather(
+            _search_brave(client, press_release_site_query, settings.BRAVE_SEARCH_API_KEY, count=5),
             _search_brave(client, press_release_query, settings.BRAVE_SEARCH_API_KEY, count=5),
             _search_brave(client, reaction_query, settings.BRAVE_SEARCH_API_KEY, count=3),
         )
 
-    all_results = press_results + reaction_results
+    all_results = site_results + press_results + reaction_results
     if not all_results:
         logger.error("No Brave search results at all for %s %s — both queries returned empty", ticker, quarter)
         return f"No search results found for {ticker} {quarter} earnings."
 
-    logger.info("Brave returned %d press + %d reaction results for %s %s", len(press_results), len(reaction_results), ticker, quarter)
+    logger.info(
+        "Brave returned %d site + %d press + %d reaction results for %s %s",
+        len(site_results), len(press_results), len(reaction_results), ticker, quarter,
+    )
 
     seen_urls = set()
     primary_urls = []
     secondary_urls = []
     reaction_urls = []
 
-    press_url_set = {r.get("url", "") for r in press_results}
+    press_url_set = {r.get("url", "") for r in site_results + press_results}
 
     for r in all_results:
         url = r.get("url", "")
@@ -156,15 +214,15 @@ async def search_earnings_report(ticker: str, quarter: str, company_name: str | 
             secondary_urls.append(r)
 
     lines = [f"Search results for {ticker} {quarter} earnings:\n"]
-    for i, r in enumerate(all_results[:8], 1):
+    for i, r in enumerate(all_results[:10], 1):
         source_tag = " [PRESS RELEASE]" if _is_primary_source(r.get("url", "")) else ""
         lines.append(f"{i}. {r.get('title', 'No title')}{source_tag}")
         lines.append(f"   URL: {r.get('url', '')}")
         lines.append(f"   {r.get('description', 'No description')}")
         lines.append("")
 
-    fetch_order = primary_urls[:3] + reaction_urls[:2] + secondary_urls[:2]
-    fetch_order = fetch_order[:6]
+    fetch_order = primary_urls[:4] + reaction_urls[:2] + secondary_urls[:2]
+    fetch_order = fetch_order[:8]
 
     async with httpx.AsyncClient() as client:
         # Give press releases more chars

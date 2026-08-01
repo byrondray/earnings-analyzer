@@ -158,8 +158,14 @@ CRITICAL RULES:
   when search results exist — always give the user something useful.
 
 FINANCIAL DATA EXTRACTION (accountant perspective):
-- EPS: Look for "earnings per share", "diluted EPS", "adjusted EPS", "net income per share".
+- EPS: Look for "earnings per share", "diluted EPS", "adjusted EPS", "net income per share",
+  or a per-share dollar amount like "$4.21 per share"/"$4.21/share". EPS values are almost
+  always single-digit or low double-digit dollar amounts.
   Use diluted/adjusted EPS if both GAAP and non-GAAP are available, note the distinction.
+- A bare label of "Earnings" or "Earnings: $X" with NO "per share" qualifier (e.g. a stock
+  quote page showing "Earnings 35.77B") is NET INCOME, not EPS. NEVER populate eps_actual
+  from such a figure — leave eps_actual null and add "missing_actual_eps" unless you also
+  find an explicit per-share number.
 - Revenue: "revenue", "net revenue", "total revenue", "net sales". Convert to raw dollars.
   "$95.4 billion" = 95400000000, "$4.2 million" = 4200000.
 - Operating Income: "operating income", "income from operations", "EBIT".

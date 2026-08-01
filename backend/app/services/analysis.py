@@ -11,6 +11,8 @@ from app.mcp_server.tools.analyze import analyze_earnings
 
 logger = logging.getLogger(__name__)
 
+_EPS_SANITY_MAX = 1000  # real EPS is dollars-per-share; anything past this is a misread
+
 _PRIMARY_SOURCE_HINTS = [
     "businesswire.com",
     "prnewswire.com",
@@ -155,6 +157,14 @@ def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
         analysis["revenue_surprise_pct"] = None
         analysis["price_reaction_pct"] = None
     else:
+        eps_actual = _coerce_float(analysis.get("eps_actual"))
+        if eps_actual is not None and abs(eps_actual) > _EPS_SANITY_MAX:
+            # Guards against the model misreading a bare net-income figure
+            # (e.g. "Earnings: $35.77B") as eps_actual — real EPS values are
+            # dollars-per-share, never in the thousands.
+            analysis["eps_actual"] = None
+            _append_quality_flag(analysis, "conflicting_metrics")
+
         if analysis.get("eps_actual") is None:
             _append_quality_flag(analysis, "missing_actual_eps")
         if analysis.get("revenue_actual") is None:
@@ -307,7 +317,10 @@ async def _run_analysis_with_lock(
         }
 
     yield ("status", {"step": "search", "message": "Searching for earnings data..."})
-    search_results = await search_earnings_report(ticker, quarter, company_name=company_name)
+    fiscal_quarter_end = event_context.get("fiscal_quarter") if event_context else None
+    search_results = await search_earnings_report(
+        ticker, quarter, company_name=company_name, fiscal_quarter_end=fiscal_quarter_end
+    )
     logger.info("Search results for %s %s: %d chars", ticker, quarter, len(search_results))
 
     yield ("status", {"step": "analyze", "message": "Reading articles & analyzing with AI..."})
