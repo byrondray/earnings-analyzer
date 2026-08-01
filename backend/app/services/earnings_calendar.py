@@ -318,19 +318,24 @@ async def upsert_earnings_events(
     if not rows:
         return []
 
-    stmt = pg_insert(EarningsEvent).values(rows)
-    stmt = stmt.on_conflict_do_update(
-        constraint="uq_ticker_report_date",
-        set_={
-            "company_name": stmt.excluded.company_name,
-            "report_time": stmt.excluded.report_time,
-            "fiscal_quarter": stmt.excluded.fiscal_quarter,
-            "eps_estimate": stmt.excluded.eps_estimate,
-            "revenue_estimate": stmt.excluded.revenue_estimate,
-            "market_cap": func.coalesce(stmt.excluded.market_cap, EarningsEvent.market_cap),
-        },
-    )
-    await db.execute(stmt)
+    # Postgres/asyncpg cap bound parameters at 32767 per statement. Each row
+    # binds ~8 params, so batch inserts to stay well under that limit.
+    _UPSERT_BATCH_SIZE = 2000
+    for i in range(0, len(rows), _UPSERT_BATCH_SIZE):
+        batch = rows[i : i + _UPSERT_BATCH_SIZE]
+        stmt = pg_insert(EarningsEvent).values(batch)
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_ticker_report_date",
+            set_={
+                "company_name": stmt.excluded.company_name,
+                "report_time": stmt.excluded.report_time,
+                "fiscal_quarter": stmt.excluded.fiscal_quarter,
+                "eps_estimate": stmt.excluded.eps_estimate,
+                "revenue_estimate": stmt.excluded.revenue_estimate,
+                "market_cap": func.coalesce(stmt.excluded.market_cap, EarningsEvent.market_cap),
+            },
+        )
+        await db.execute(stmt)
     await db.commit()
 
     if not return_events:

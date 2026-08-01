@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import re
@@ -788,10 +787,10 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
     analysis_blocks = _build_analysis_cards(analysis)
     primary_calendar_href = f"/calendar/{primary_event.report_date.isoformat()}"
     next_label = "Upcoming earnings date" if upcoming_event else "Latest earnings date"
-    news_articles, week_events = await asyncio.gather(
-        _fetch_public_news_articles(upper),
-        get_week_earnings(db, primary_event.report_date),
-    )
+    # Sequential, not asyncio.gather: both use the same AsyncSession (`db`),
+    # and SQLAlchemy sessions aren't safe for concurrent use.
+    news_articles = await _fetch_public_news_articles(upper)
+    week_events = await get_week_earnings(db, primary_event.report_date)
     news_block = "".join(
       _build_news_item(article)
       for article in news_articles
