@@ -456,7 +456,28 @@ async def search_ticker(
         .order_by(EarningsEvent.report_date)
     )
     result = await db.execute(query)
-    return list(result.scalars().all())
+    events = list(result.scalars().all())
+
+    if not events:
+        # Alpha Vantage's EARNINGS_CALENDAR only looks forward, so a ticker
+        # that already reported this week (and was never previously synced
+        # into the DB) won't show up above. Fall back to the same
+        # this-week historical sources used by get_week_earnings.
+        week_start, friday = week_bounds(date.today())
+        week_end = friday + timedelta(days=2)
+        try:
+            historical = await _fetch_historical_earnings_nasdaq(week_start, week_end)
+            if not historical:
+                historical = await _fetch_historical_earnings_fmp(week_start, week_end)
+            matching = [row for row in historical if (row.get("symbol") or "").upper() == upper_ticker]
+            if matching:
+                await upsert_earnings_events(db, matching, return_events=False)
+                result = await db.execute(query)
+                events = list(result.scalars().all())
+        except Exception as e:
+            logger.warning("Historical fallback search failed for %s: %s", upper_ticker, e)
+
+    return events
 
 
 _av_sync_task: "asyncio.Task | None" = None
