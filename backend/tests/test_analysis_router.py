@@ -62,6 +62,21 @@ class TestAnalyzeEndpoint:
         response = await async_client.post("/api/analysis/AAPL")
         assert response.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_post_analyze_forwards_force_param(self, async_client, sample_analysis_result):
+        result = {**sample_analysis_result, "ticker": "AAPL", "quarter": "Q4-2025"}
+
+        with patch(
+            "app.routers.analysis.run_analysis_streaming",
+            return_value=_mock_streaming_result(result),
+        ) as mocked_run:
+            response = await async_client.post(
+                "/api/analysis/AAPL", params={"quarter": "Q4-2025", "force": "true"}
+            )
+
+        assert response.status_code == 200
+        mocked_run.assert_called_once_with("AAPL", "Q4-2025", force=True)
+
 
 class TestGetAnalysisEndpoint:
     @pytest.mark.asyncio

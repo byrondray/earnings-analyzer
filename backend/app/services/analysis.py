@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 import logging
 
 from sqlalchemy import delete, select
@@ -12,6 +13,13 @@ from app.mcp_server.tools.analyze import analyze_earnings
 logger = logging.getLogger(__name__)
 
 _EPS_SANITY_MAX = 1000  # real EPS is dollars-per-share; anything past this is a misread
+
+_EASTERN = ZoneInfo("America/New_York")
+# Companies reporting "post market" almost always release after the 4pm ET
+# close; give it until 4:30pm ET before treating a same-day post-market
+# report as already out, and rely on the search results / Claude's own read
+# to determine has_reported past that point rather than force-overriding it.
+_POST_MARKET_RELEASE_CUTOFF = (16, 30)
 
 _PRIMARY_SOURCE_HINTS = [
     "businesswire.com",
@@ -140,9 +148,15 @@ def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
 
     report_date = _parse_report_date(event_context)
     report_time = (event_context or {}).get("report_time")
+    now_eastern = datetime.now(_EASTERN)
+    today_eastern = now_eastern.date()
     is_future = bool(report_date) and (
-        report_date > date.today()
-        or (report_date == date.today() and report_time == "post_market")
+        report_date > today_eastern
+        or (
+            report_date == today_eastern
+            and report_time == "post_market"
+            and (now_eastern.hour, now_eastern.minute) < _POST_MARKET_RELEASE_CUTOFF
+        )
     )
     if is_future and analysis.get("has_reported") is True:
         analysis["has_reported"] = False
@@ -223,10 +237,10 @@ def _apply_quality_gate(analysis: dict, event_context: dict | None) -> dict:
 
 
 async def run_analysis_streaming(
-    ticker: str, quarter: str
+    ticker: str, quarter: str, force: bool = False
 ) -> AsyncGenerator[tuple[str, dict], None]:
     try:
-        async for event_type, payload in _run_analysis_streaming_inner(ticker, quarter):
+        async for event_type, payload in _run_analysis_streaming_inner(ticker, quarter, force):
             yield (event_type, payload)
     except Exception as e:
         logger.exception("Analysis streaming failed for %s %s", ticker, quarter)
@@ -238,7 +252,7 @@ _LOCK_POLL_MAX_ATTEMPTS = 45  # ~90s, matches ANALYSIS_LOCK_TTL
 
 
 async def _run_analysis_streaming_inner(
-    ticker: str, quarter: str
+    ticker: str, quarter: str, force: bool = False
 ) -> AsyncGenerator[tuple[str, dict], None]:
     from app.services.cache import (
         get_cached_analysis_redis,
@@ -249,10 +263,11 @@ async def _run_analysis_streaming_inner(
 
     yield ("status", {"step": "cache", "message": "Starting analysis..."})
 
-    cached = await get_cached_analysis_redis(ticker, quarter)
-    if cached:
-        yield ("result", cached)
-        return
+    if not force:
+        cached = await get_cached_analysis_redis(ticker, quarter)
+        if cached:
+            yield ("result", cached)
+            return
 
     got_lock = await acquire_analysis_lock(ticker, quarter)
     if not got_lock:

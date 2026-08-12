@@ -40,7 +40,7 @@ class AnalysisStreamError extends Error {}
 
 const ANALYSIS_STREAM_TIMEOUT_MS = 120_000;
 
-export async function triggerAnalysis(ticker, quarter, onStatus) {
+export async function triggerAnalysis(ticker, quarter, onStatus, force = false) {
   const token = await getToken();
   const headers = { Accept: 'text/event-stream' };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -51,10 +51,13 @@ export async function triggerAnalysis(ticker, quarter, onStatus) {
     ANALYSIS_STREAM_TIMEOUT_MS,
   );
 
+  const params = new URLSearchParams({ quarter });
+  if (force) params.set('force', 'true');
+
   let res;
   try {
     res = await fetch(
-      `${API_BASE}/analysis/${ticker}?quarter=${encodeURIComponent(quarter)}`,
+      `${API_BASE}/analysis/${ticker}?${params.toString()}`,
       {
         method: 'POST',
         headers,

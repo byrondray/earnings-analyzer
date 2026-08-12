@@ -90,6 +90,23 @@
     }
   }
 
+  async function rerunAnalysis() {
+    loadingAnalysis = true;
+    analysisError = null;
+    analysisStatus = 'Rechecking...';
+    const quarter = resolveTargetQuarter();
+    try {
+      analysis = await triggerAnalysis(ticker, quarter, (msg) => {
+        analysisStatus = msg;
+      }, true);
+    } catch (e) {
+      analysisError = e.message;
+    } finally {
+      loadingAnalysis = false;
+      analysisStatus = '';
+    }
+  }
+
   function resolveTargetQuarter() {
     return (
       normalizeQuarter(selectedQuarter)
@@ -634,6 +651,15 @@
               <p class="text-sm text-accent-gold">⚠️ The scheduled earnings date has passed{#if earningsEvent} (<strong>{new Date(earningsEvent.report_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>){/if}, but the latest results could not be verified from reliable sources yet. Estimates and sentiment may still reflect pre-report expectations.</p>
             {:else}
               <p class="text-sm text-accent-gold">⏳ This company has not reported earnings yet.{#if earningsEvent} Earnings are scheduled for <strong>{new Date(earningsEvent.report_date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>.{/if} Estimates and sentiment are based on pre-report market expectations.</p>
+            {/if}
+            {#if user}
+              <button
+                class="mt-3 text-sm font-semibold text-accent-gold underline disabled:opacity-50 disabled:cursor-not-allowed"
+                onclick={rerunAnalysis}
+                disabled={loadingAnalysis}
+              >
+                {loadingAnalysis ? (analysisStatus || 'Rechecking...') : 'Recheck now'}
+              </button>
             {/if}
           </div>
         {/if}
