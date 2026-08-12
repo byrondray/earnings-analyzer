@@ -114,8 +114,12 @@ async def _fetch_brave_news(ticker: str, api_key: str) -> list[dict]:
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
+            # No retries: this path serves low-value public/news traffic (including
+            # crawlers) that shares a Brave rate-limit budget with the paid earnings
+            # analysis search. Retrying here would burn quota the analysis path needs.
             data = await brave_get_with_retry(
-                client, BRAVE_NEWS_URL, f"{ticker} stock earnings", api_key, count=15
+                client, BRAVE_NEWS_URL, f"{ticker} stock earnings", api_key, count=15,
+                max_retries=0,
             )
         if data is None:
             return []

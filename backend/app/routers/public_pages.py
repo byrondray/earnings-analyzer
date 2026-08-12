@@ -35,6 +35,17 @@ _RELATED_LIMIT = 6
 _STRUCTURED_DATA_EVENT_LIMIT = 20
 _NEWS_DESCRIPTION_MAX_LENGTH = 300
 _PAGE_CACHE_HEADER = {"Cache-Control": "public, max-age=300, stale-while-revalidate=600"}
+_BOT_USER_AGENT_HINTS = (
+    "bot", "crawl", "spider", "slurp", "bingpreview", "facebookexternalhit",
+    "pinterest", "linkedinbot", "whatsapp", "telegrambot", "discordbot",
+    "ahrefsbot", "semrushbot", "mj12bot", "dotbot", "gptbot", "ccbot",
+    "google-inspectiontool", "petalbot",
+)
+
+
+def _is_bot_user_agent(request: Request) -> bool:
+    ua = request.headers.get("user-agent", "").lower()
+    return any(hint in ua for hint in _BOT_USER_AGENT_HINTS)
 
 
 def _absolute_url(request: Request, path: str):
@@ -788,7 +799,10 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
     next_label = "Upcoming earnings date" if upcoming_event else "Latest earnings date"
     # Sequential, not asyncio.gather: both use the same AsyncSession (`db`),
     # and SQLAlchemy sessions aren't safe for concurrent use.
-    news_articles = await _fetch_public_news_articles(upper)
+    # Bots don't need live news content, and crawlers hitting many distinct
+    # tickers back-to-back were exhausting the Brave rate-limit budget shared
+    # with the paid earnings-analysis search.
+    news_articles = [] if _is_bot_user_agent(request) else await _fetch_public_news_articles(upper)
     week_events = await get_week_earnings(db, primary_event.report_date)
     news_block = "".join(
       _build_news_item(article)
