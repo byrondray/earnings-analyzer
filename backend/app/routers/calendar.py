@@ -91,7 +91,11 @@ async def search_stock(
     db: AsyncSession = Depends(get_db),
 ):
     upper = validate_ticker(ticker)
-    events = await search_ticker(db, upper)
+    try:
+        events = await search_ticker(db, upper)
+    except Exception:
+        logger.exception("Ticker search failed for %s", upper)
+        raise HTTPException(status_code=503, detail="Failed to search for ticker")
     return SearchResponse(
         ticker=upper,
         events=[_to_response(e) for e in events],
@@ -111,7 +115,12 @@ async def _get_week_response(db: AsyncSession, target_date: date) -> WeekEarning
                 week_start=monday, week_end=week_end, events=cached
             )
 
-    events = await get_week_earnings(db, target_date)
+    try:
+        events = await get_week_earnings(db, target_date)
+    except Exception:
+        logger.exception("Failed to fetch week earnings for %s", target_date)
+        raise HTTPException(status_code=503, detail="Failed to fetch earnings calendar")
+
     response = WeekEarningsResponse(
         week_start=monday,
         week_end=week_end,
@@ -308,15 +317,19 @@ async def get_sparklines(request: Request, tickers: list[str] = Query(..., alias
     return JSONResponse(result)
 
 
+def _require_debug_enabled():
+    if not get_settings().ENABLE_DEBUG_ENDPOINTS:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 @router.get("/debug/source-check")
 @limiter.limit("5/hour")
 async def debug_source_check(
     request: Request,
     target_date: date = Query(default=None, alias="date"),
+    _enabled: None = Depends(_require_debug_enabled),
     user_id: str = Depends(get_current_user),
 ):
-    if not get_settings().ENABLE_DEBUG_ENDPOINTS:
-        raise HTTPException(status_code=404, detail="Not found")
     if target_date is None:
         target_date = date.today()
     week_start, week_end_base = week_bounds(target_date)

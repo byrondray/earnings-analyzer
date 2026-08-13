@@ -13,4 +13,13 @@ export default defineConfig({
       },
     },
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./tests/setup.js'],
+  },
+  resolve: process.env.VITEST
+    ? {
+        conditions: ['browser'],
+      }
+    : undefined,
 });

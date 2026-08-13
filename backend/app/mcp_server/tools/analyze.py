@@ -222,9 +222,14 @@ def _build_event_context(ticker: str, event_context: dict | None) -> str:
     return "\n".join(parts)
 
 
+ANTHROPIC_REQUEST_TIMEOUT = 60.0  # seconds; must stay comfortably under ANALYSIS_LOCK_TTL
+
+
 async def analyze_earnings(ticker: str, earnings_data: str, event_context: dict | None = None) -> dict:
     settings = get_settings()
-    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = anthropic.AsyncAnthropic(
+        api_key=settings.ANTHROPIC_API_KEY, timeout=ANTHROPIC_REQUEST_TIMEOUT
+    )
 
     context_str = _build_event_context(ticker, event_context)
     company_hint = ""

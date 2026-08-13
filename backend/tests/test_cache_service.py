@@ -13,14 +13,18 @@ from app.services.cache import (
     set_cached_analysis_redis,
     acquire_analysis_lock,
     release_analysis_lock,
+    acquire_ticker_search_lock,
+    release_ticker_search_lock,
     _market_cap_key,
     _calendar_key,
     _analysis_key,
     _analysis_lock_key,
+    _ticker_search_lock_key,
     MARKET_CAP_TTL,
     EARNINGS_CALENDAR_TTL,
     ANALYSIS_TTL,
     ANALYSIS_LOCK_TTL,
+    TICKER_SEARCH_LOCK_TTL,
 )
 
 
@@ -245,7 +249,7 @@ class TestAnalysisLock:
     async def test_acquire_lock_handles_exception(self, mock_get_redis):
         from app.services import cache as cache_module
 
-        cache_module._local_analysis_locks.discard("earnings:analysis_lock:AAPL:Q4-2025")
+        cache_module._local_locks.discard("earnings:analysis_lock:AAPL:Q4-2025")
         mock_redis = AsyncMock()
         mock_redis.set = AsyncMock(side_effect=Exception("Connection refused"))
         mock_get_redis.return_value = mock_redis
@@ -258,7 +262,7 @@ class TestAnalysisLock:
     async def test_acquire_lock_exception_blocks_concurrent_duplicate(self, mock_get_redis):
         from app.services import cache as cache_module
 
-        cache_module._local_analysis_locks.discard("earnings:analysis_lock:AAPL:Q4-2025")
+        cache_module._local_locks.discard("earnings:analysis_lock:AAPL:Q4-2025")
         mock_redis = AsyncMock()
         mock_redis.set = AsyncMock(side_effect=Exception("Connection refused"))
         mock_get_redis.return_value = mock_redis
@@ -278,3 +282,55 @@ class TestAnalysisLock:
 
         await release_analysis_lock("AAPL", "Q4-2025")
         mock_redis.delete.assert_called_once_with("earnings:analysis_lock:AAPL:Q4-2025")
+
+
+class TestTickerSearchLock:
+    def test_ticker_search_lock_key(self):
+        assert _ticker_search_lock_key("aapl") == "earnings:ticker_search_lock:AAPL"
+
+    @pytest.mark.asyncio
+    @patch("app.services.cache.get_redis")
+    async def test_acquire_succeeds_when_key_absent(self, mock_get_redis):
+        mock_redis = AsyncMock()
+        mock_redis.set = AsyncMock(return_value=True)
+        mock_get_redis.return_value = mock_redis
+
+        result = await acquire_ticker_search_lock("NEWCO")
+        assert result is True
+        mock_redis.set.assert_called_once_with(
+            "earnings:ticker_search_lock:NEWCO", "1", nx=True, ex=TICKER_SEARCH_LOCK_TTL
+        )
+
+    @pytest.mark.asyncio
+    @patch("app.services.cache.get_redis")
+    async def test_acquire_fails_when_already_held(self, mock_get_redis):
+        mock_redis = AsyncMock()
+        mock_redis.set = AsyncMock(return_value=None)
+        mock_get_redis.return_value = mock_redis
+
+        result = await acquire_ticker_search_lock("NEWCO")
+        assert result is False
+
+    @pytest.mark.asyncio
+    @patch("app.services.cache.get_redis")
+    async def test_no_redis_falls_back_to_in_process_lock(self, mock_get_redis):
+        from app.services import cache as cache_module
+
+        cache_module._local_locks.discard("earnings:ticker_search_lock:NEWCO")
+        mock_get_redis.return_value = None
+
+        first = await acquire_ticker_search_lock("NEWCO")
+        second = await acquire_ticker_search_lock("NEWCO")
+        assert first is True
+        assert second is False
+
+        await release_ticker_search_lock("NEWCO")
+
+    @pytest.mark.asyncio
+    @patch("app.services.cache.get_redis")
+    async def test_release_lock(self, mock_get_redis):
+        mock_redis = AsyncMock()
+        mock_get_redis.return_value = mock_redis
+
+        await release_ticker_search_lock("NEWCO")
+        mock_redis.delete.assert_called_once_with("earnings:ticker_search_lock:NEWCO")

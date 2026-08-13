@@ -4,15 +4,51 @@
 
   let { data, onClose, user = null, isFavorited = false, onFavoriteChange } = $props();
 
+  let dialogEl = $state(null);
+  let previouslyFocused = null;
+
   $effect(() => {
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = ''; };
+    previouslyFocused = document.activeElement;
+    dialogEl?.focus();
+    return () => {
+      document.body.style.overflow = '';
+      if (previouslyFocused && typeof previouslyFocused.focus === 'function') {
+        previouslyFocused.focus();
+      }
+    };
   });
+
+  function focusableElements() {
+    if (!dialogEl) return [];
+    return Array.from(
+      dialogEl.querySelectorAll('a[href], button:not([disabled]), input, select, textarea, [tabindex]:not([tabindex="-1"])'),
+    );
+  }
+
+  function handleKeydown(e) {
+    if (e.key === 'Escape') {
+      onClose();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const focusable = focusableElements();
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 
   let allNA = $derived(data.eps_estimate == null && data.eps_actual == null && data.revenue_estimate == null && data.revenue_actual == null);
 </script>
 
-<div class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-1000 p-4" onclick={onClose} onkeydown={(e) => e.key === 'Escape' && onClose()} role="dialog" aria-modal="true" tabindex="-1">
+<div class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-1000 p-4" onclick={onClose} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1" bind:this={dialogEl}>
   <div class="bg-surface-card rounded-3xl border border-border-subtle max-w-160 w-full max-h-[90vh] overflow-hidden relative shadow-2xl" onclick={(e) => e.stopPropagation()} onkeydown={() => {}} role="presentation">
     <div class="overflow-y-auto max-h-[90vh] overscroll-contain p-8">
     <div class="absolute top-0 left-0 right-0 h-40 bg-linear-to-b from-accent-green/5 to-transparent rounded-t-3xl pointer-events-none"></div>

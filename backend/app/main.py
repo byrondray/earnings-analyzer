@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -61,7 +61,17 @@ def _get_cors_origins() -> list[str]:
     extra = get_settings().CORS_ORIGINS
     origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
     if extra:
-        origins.extend(o.strip() for o in extra.split(",") if o.strip())
+        for raw in extra.split(","):
+            origin = raw.strip()
+            if not origin:
+                continue
+            if origin == "*":
+                logger.warning("Ignoring '*' in CORS_ORIGINS: wildcard origins are unsafe with allow_credentials=True")
+                continue
+            if not (origin.startswith("http://") or origin.startswith("https://")):
+                logger.warning("Ignoring CORS_ORIGINS entry missing scheme: %r", origin)
+                continue
+            origins.append(origin)
     return origins
 
 
@@ -79,6 +89,12 @@ app.include_router(favorites.router)
 app.include_router(news.router)
 app.include_router(chart.router)
 app.include_router(public_pages.router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 @app.get("/health")

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -770,7 +771,11 @@ async def stock_page(ticker: str, request: Request, db: AsyncSession = Depends(g
     result = await db.execute(query)
     events = list(result.scalars().all())
     if not events:
-        events = list(reversed(await search_ticker(db, upper)))
+        try:
+            events = list(reversed(await asyncio.wait_for(search_ticker(db, upper), timeout=15.0)))
+        except Exception:
+            logger.warning("search_ticker fallback failed or timed out for %s", upper)
+            events = []
     if not events:
         raise HTTPException(status_code=404, detail=f"No earnings data found for {upper}")
 

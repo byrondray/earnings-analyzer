@@ -95,7 +95,12 @@ export async function triggerAnalysis(ticker, quarter, onStatus, force = false) 
         if (line.startsWith('event: ')) {
           eventType = line.slice(7).trim();
         } else if (line.startsWith('data: ') && eventType) {
-          const data = JSON.parse(line.slice(6));
+          let data;
+          try {
+            data = JSON.parse(line.slice(6));
+          } catch {
+            throw new AnalysisStreamError('Received malformed data from server');
+          }
           if (eventType === 'status' && onStatus) {
             onStatus(data.message);
           } else if (eventType === 'result') {

@@ -161,12 +161,12 @@ def _analysis_lock_key(ticker: str, quarter: str) -> str:
 ANALYSIS_LOCK_TTL = 90  # seconds; generous upper bound for search + Claude call
 
 
-_local_analysis_locks: set[str] = set()
+_local_locks: set[str] = set()
 
 
-async def acquire_analysis_lock(ticker: str, quarter: str) -> bool:
-    """Best-effort lock so concurrent requests for the same ticker/quarter
-    don't each pay for a separate Brave + Claude run. Returns True if the
+async def _acquire_lock(key: str, ttl: int) -> bool:
+    """Best-effort lock so concurrent requests for the same key don't each
+    pay for a separate round of external API calls. Returns True if the
     caller acquired the lock (should proceed), False if another request is
     already running it.
 
@@ -174,20 +174,18 @@ async def acquire_analysis_lock(ticker: str, quarter: str) -> bool:
     is unavailable, falls back to an in-process lock set so a Redis outage
     at least prevents duplicate paid API calls within a single instance,
     rather than silently disabling the lock entirely."""
-    key = _analysis_lock_key(ticker, quarter)
     r = await get_redis()
     if r is None:
-        return _acquire_local_analysis_lock(key)
+        return _acquire_local_lock(key)
     try:
-        return bool(await r.set(key, "1", nx=True, ex=ANALYSIS_LOCK_TTL))
+        return bool(await r.set(key, "1", nx=True, ex=ttl))
     except Exception:
         logger.warning("Redis lock acquisition failed, falling back to in-process lock for %s", key)
-        return _acquire_local_analysis_lock(key)
+        return _acquire_local_lock(key)
 
 
-async def release_analysis_lock(ticker: str, quarter: str):
-    key = _analysis_lock_key(ticker, quarter)
-    _local_analysis_locks.discard(key)
+async def _release_lock(key: str):
+    _local_locks.discard(key)
     r = await get_redis()
     if r is None:
         return
@@ -197,11 +195,34 @@ async def release_analysis_lock(ticker: str, quarter: str):
         logger.warning("Redis lock release failed for %s", key)
 
 
-def _acquire_local_analysis_lock(key: str) -> bool:
-    if key in _local_analysis_locks:
+def _acquire_local_lock(key: str) -> bool:
+    if key in _local_locks:
         return False
-    _local_analysis_locks.add(key)
+    _local_locks.add(key)
     return True
+
+
+async def acquire_analysis_lock(ticker: str, quarter: str) -> bool:
+    return await _acquire_lock(_analysis_lock_key(ticker, quarter), ANALYSIS_LOCK_TTL)
+
+
+async def release_analysis_lock(ticker: str, quarter: str):
+    await _release_lock(_analysis_lock_key(ticker, quarter))
+
+
+def _ticker_search_lock_key(ticker: str) -> str:
+    return f"earnings:ticker_search_lock:{ticker.upper()}"
+
+
+TICKER_SEARCH_LOCK_TTL = 40  # seconds; comfortably covers sequential Nasdaq (15s) + FMP (15s) timeouts
+
+
+async def acquire_ticker_search_lock(ticker: str) -> bool:
+    return await _acquire_lock(_ticker_search_lock_key(ticker), TICKER_SEARCH_LOCK_TTL)
+
+
+async def release_ticker_search_lock(ticker: str):
+    await _release_lock(_ticker_search_lock_key(ticker))
 
 
 _AV_SYNC_KEY = "earnings:av_last_sync"

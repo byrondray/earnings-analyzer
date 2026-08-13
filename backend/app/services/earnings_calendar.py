@@ -463,19 +463,48 @@ async def search_ticker(
         # that already reported this week (and was never previously synced
         # into the DB) won't show up above. Fall back to the same
         # this-week historical sources used by get_week_earnings.
-        week_start, friday = week_bounds(date.today())
-        week_end = friday + timedelta(days=2)
-        try:
-            historical = await _fetch_historical_earnings_nasdaq(week_start, week_end)
-            if not historical:
-                historical = await _fetch_historical_earnings_fmp(week_start, week_end)
-            matching = [row for row in historical if (row.get("symbol") or "").upper() == upper_ticker]
-            if matching:
-                await upsert_earnings_events(db, matching, return_events=False)
+        #
+        # Guarded by a short-lived lock so concurrent lookups of the same
+        # brand-new ticker don't each independently hit Nasdaq/FMP.
+        from app.services.cache import (
+            acquire_ticker_search_lock,
+            release_ticker_search_lock,
+            TICKER_SEARCH_LOCK_TTL,
+        )
+
+        got_lock = await acquire_ticker_search_lock(upper_ticker)
+        if got_lock:
+            try:
+                week_start, friday = week_bounds(date.today())
+                week_end = friday + timedelta(days=2)
+                historical = await _fetch_historical_earnings_nasdaq(week_start, week_end)
+                if not historical:
+                    historical = await _fetch_historical_earnings_fmp(week_start, week_end)
+                matching = [row for row in historical if (row.get("symbol") or "").upper() == upper_ticker]
+                if matching:
+                    await upsert_earnings_events(db, matching, return_events=False)
+                    result = await db.execute(query)
+                    events = list(result.scalars().all())
+            except Exception as e:
+                logger.warning("Historical fallback search failed for %s: %s", upper_ticker, e)
+            finally:
+                await release_ticker_search_lock(upper_ticker)
+        else:
+            # Another request is already fetching this ticker. Poll for it to
+            # finish (bounded by the lock's own TTL) instead of duplicating
+            # the fetch or giving up after a single short sleep.
+            poll_interval = 1.0
+            max_attempts = int(TICKER_SEARCH_LOCK_TTL / poll_interval)
+            for _ in range(max_attempts):
+                await asyncio.sleep(poll_interval)
                 result = await db.execute(query)
                 events = list(result.scalars().all())
-        except Exception as e:
-            logger.warning("Historical fallback search failed for %s: %s", upper_ticker, e)
+                if events or await acquire_ticker_search_lock(upper_ticker):
+                    # Either data showed up, or the holder finished/released
+                    # (or crashed) and the lock is free again -- stop waiting.
+                    if not events:
+                        await release_ticker_search_lock(upper_ticker)
+                    break
 
     return events
 
